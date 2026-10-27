@@ -48,6 +48,15 @@
       "path": "../../subagent/subagent"
     },
     {
+      "path": "../../subprocess/subprocess"
+    },
+    {
+      "path": "../../util/home-paths"
+    },
+    {
+      "path": "../../interaction/user-questions"
+    },
+    {
       "path": "../../core/system-prompt"
     },
     {

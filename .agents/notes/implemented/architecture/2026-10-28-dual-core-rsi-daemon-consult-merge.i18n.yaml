@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-28-dual-core-rsi-daemon-consult-merge.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-10-28-dual-core-rsi-daemon-consult-merge.md
+/agent-note-daemon-scheduled-dual-core-rsi-with-consult-gated-merges-and-a-git-ledger:
+  en: 3723f593215622d6
+  zh: 40afcbed828b41c8
+/agent-note-daemon-scheduled-dual-core-rsi-with-consult-gated-merges-and-a-git-ledger/problem:
+  en: 7382996ca837b65a
+  zh: 9b5b6c5506fa3e47
+/agent-note-daemon-scheduled-dual-core-rsi-with-consult-gated-merges-and-a-git-ledger/decision:
+  en: 8457b48ab6f37278
+  zh: aa5d583b684878f4
+/agent-note-daemon-scheduled-dual-core-rsi-with-consult-gated-merges-and-a-git-ledger/consequences:
+  en: c8c973302b04c3ae
+  zh: 6c48be2ff37db3ec
+/agent-note-daemon-scheduled-dual-core-rsi-with-consult-gated-merges-and-a-git-ledger/alternatives-considered:
+  en: 52f2e56e5f1fda11
+  zh: 7090059b03690fee

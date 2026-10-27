@@ -1050,13 +1050,13 @@ export type Config = CuaConfig
 
 ## `@deepseek-ai/dsh-experimental-dual-core-rsi`
 
-- `inject`: `agents` · `sessions` · `sessionProjections` · `systemPrompt` · `storageDomain` · `rsiDistiller` · `rsiBenchmark` · `tools` · `commands` · `jobs`
-- `source`: [`packages/experimental/dual-core-rsi/src/index.ts:79`](../packages/experimental/dual-core-rsi/src/index.ts)
+- `inject`: `agents` · `sessions` · `sessionProjections` · `systemPrompt` · `storageDomain` · `rsiDistiller` · `rsiBenchmark` · `tools` · `commands` · `jobs` · `subprocess`
+- `source`: [`packages/experimental/dual-core-rsi/src/index.ts:92`](../packages/experimental/dual-core-rsi/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. Every deployment-varying choice is a validated field. */
 export interface Config {
-  /** Benchmark improvement fraction that triggers a core swap (default `0.05` is +5%). */
+  /** Benchmark improvement fraction that qualifies a candidate as pending merge (default `0.05` is +5%). */
   threshold?: number
   /** Maximum guidance lines in one artifact set (default 16). */
   maxGuidanceLines?: number
@@ -1078,6 +1078,20 @@ export interface Config {
   runWaitMs?: number
   /** Whether recent closed sessions join the digest through `ctx.sessionQuery` (default true). */
   digestIncludeStoredSessions?: boolean
+  /** Whether the scheduled daemon driver runs cycles without a manual command (default true). */
+  daemonEnabled?: boolean
+  /** Milliseconds between scheduled daemon ticks (default 600000). */
+  daemonIntervalMs?: number
+  /** Failed-attempt retries per scheduled daemon round beyond the first attempt (default 2, maximum 10). */
+  daemonMaxRetries?: number
+  /** Backoff before a retried scheduled attempt, in milliseconds (default 30000). */
+  daemonRetryBackoffMs?: number
+  /** Timebox for one scheduled daemon cycle attempt, in milliseconds (default 600000). */
+  cycleTimeoutMs?: number
+  /** How long the exit merge consult waits for the user's answer, in milliseconds (default 300000). */
+  consultTimeoutMs?: number
+  /** Directory of the local git ledger recording merged and rolled-back policies (default `~/.dsh/dual-core-rsi-ledger`). */
+  ledgerDir?: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-dual-core-rsi -->

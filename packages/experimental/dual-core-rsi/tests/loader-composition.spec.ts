@@ -15,6 +15,7 @@ import SkillRegistry from '@deepseek-ai/dsh-skill'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as storageDomain from '@deepseek-ai/dsh-storage-domain'
 import * as storageJson from '@deepseek-ai/dsh-storage-json'
+import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import DualCoreRsiService from '../src/index.ts'
@@ -65,6 +66,8 @@ describe('dual-core RSI through a real Loader composition', () => {
       "  name: '@deepseek-ai/dsh-agent'",
       '- id: jobs',
       "  name: '@deepseek-ai/dsh-jobs-local'",
+      '- id: subprocess',
+      "  name: '@deepseek-ai/dsh-subprocess-local'",
       '- id: subagents',
       "  name: '@deepseek-ai/dsh-subagent'",
       '- id: dual-core-rsi-distiller',
@@ -107,6 +110,7 @@ describe('dual-core RSI through a real Loader composition', () => {
           case '@deepseek-ai/dsh-commands': return CommandRuntime
           case '@deepseek-ai/dsh-agent': return AgentRegistry
           case '@deepseek-ai/dsh-jobs-local': return LocalJobRegistry
+          case '@deepseek-ai/dsh-subprocess-local': return LocalSubprocessRuntime
           case '@deepseek-ai/dsh-experimental-dual-core-rsi/distiller-subagent': return distillerSubagentPlugin
           case '@deepseek-ai/dsh-experimental-dual-core-rsi/benchmark-fixture': return benchmarkFixturePlugin
           case '@deepseek-ai/dsh-experimental-dual-core-rsi': return dualCoreRsiPlugin

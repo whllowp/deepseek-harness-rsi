@@ -1809,7 +1809,7 @@ A fixed foreground workflow starts one fresh structured child per round; the mod
 
 ### `rsi_history`
 
-List recent dual-core RSI distillation cycles and rollback archives, newest first.
+List recent dual-core RSI distillation cycles, rollback archives, and daemon self-repair incidents, newest first.
 
 ```json
 {
@@ -1817,7 +1817,7 @@ List recent dual-core RSI distillation cycles and rollback archives, newest firs
   "properties": {
     "limit": {
       "type": "number",
-      "description": "Maximum cycles and archives to list each (default 20)."
+      "description": "Maximum cycles, archives, and incidents to list each (default 20)."
     }
   }
 }
@@ -1827,7 +1827,7 @@ Source: [`packages/experimental/dual-core-rsi/src/index.ts`](../packages/experim
 
 ### `rsi_rollback`
 
-Roll the dual-core RSI user core back to one archived generation (the newest archive when the id is omitted). The replaced generation is archived in turn, so a rollback is reversible.
+Roll the dual-core RSI user core back to one archived generation (the newest archive when the id is omitted). The replaced generation is archived and recorded in the git ledger in turn, so a rollback is reversible.
 
 ```json
 {
@@ -1845,7 +1845,7 @@ Source: [`packages/experimental/dual-core-rsi/src/index.ts`](../packages/experim
 
 ### `rsi_run`
 
-Start one dual-core RSI daemon distillation cycle as a background job. Use ONLY when the direct human explicitly asks to run an RSI cycle or self-improvement round; read the job output through the job tools. Each cycle runs one fresh model child and spends tokens.
+Start one dual-core RSI daemon distillation cycle as a background job. Use ONLY when the direct human explicitly asks to run an RSI cycle or self-improvement round; the scheduled daemon already cycles on its own. Each cycle runs one fresh model child and spends tokens.
 
 ```json
 {
@@ -1858,7 +1858,7 @@ Source: [`packages/experimental/dual-core-rsi/src/index.ts`](../packages/experim
 
 ### `rsi_status`
 
-Show the dual-core RSI daemon state: the user-core and daemon-core generations, the swap threshold, and the last distillation cycle. Read-only.
+Show the dual-core RSI daemon state: the user-core and daemon-core generations, the scheduled daemon, the pending merge candidate, recent self-repair incidents, and the last distillation cycle. Read-only.
 
 ```json
 {

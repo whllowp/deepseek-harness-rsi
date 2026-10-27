@@ -3,14 +3,17 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/subsystems/dual-core-rsi.md
 /dual-core-rsi:
-  en: 8452f520aa9f779d
-  zh: 47a8027b392cafba
+  en: ed3813c10e198b2e
+  zh: 129a94ffda259c90
 /dual-core-rsi/generations-and-archives:
-  en: fe1e49e6f01489f9
-  zh: 051d7013dcb173d6
+  en: f5387cc73a03f752
+  zh: 41eac60caf8f3385
 /dual-core-rsi/benchmark-evidence:
   en: 330aec1db81020df
   zh: 36414045b31a85ed
-/dual-core-rsi/cycles-and-rollback:
-  en: 105bf699869d3c6e
-  zh: f97a0b8801a25866
+/dual-core-rsi/cycles-decisions-and-rollback:
+  en: 0cc956ffaf33683d
+  zh: 59081680ffe2fa9a
+/dual-core-rsi/self-repair-incidents:
+  en: 02fd4a2a4a558011
+  zh: ec456d7d4cca91e4

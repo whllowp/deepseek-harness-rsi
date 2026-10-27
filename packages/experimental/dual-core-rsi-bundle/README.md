@@ -1,5 +1,5 @@
 ---
-description: "Dual-core RSI mode: a daemon core distills the user core, benchmarks candidates, and swaps cores past a 5% improvement threshold."
+description: "Dual-core RSI mode: a default-on daemon core distills the user core, benchmarks candidates, and offers gate-passing candidates for a human merge decision recorded in a local git ledger."
 kind: "package-bundle"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Add the experimental dual-core RSI mode to the harness as a switched-off optional layer. When enabled, a daemon core distills the user core's live sessions into bounded policy artifacts, benchmarks candidates, and past a 5% improvement threshold swaps the cores with the replaced surface archived for rollback.
+Add the experimental dual-core RSI mode to the harness as a switched-off optional layer. When enabled, a daemon core distills the user core's live sessions into bounded policy artifacts on its own schedule, benchmarks candidates, and past a 5% improvement threshold parks the candidate as a pending merge offer; a human merge replaces the policy, archives the replaced surface, and records the change in a local git ledger.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ Add the experimental dual-core RSI mode to the harness as a switched-off optiona
 
 In Web or Desktop, open Plugins and enable **Dual-core RSI** in Official. Switch it off to remove its profile layer.
 
-Enabling the bundle mounts the subagent distiller, a fixture benchmark, and the dual-core RSI service with its tools and `/rsi` command in the running Host. Drive cycles with `/rsi run`; the shipped fixture benchmark checks that the distilled policy carries verification guidance and stays inside the guidance budget, so it demonstrates the swap gate rather than end-task quality.
+Enabling the bundle mounts the subagent distiller, a fixture benchmark, and the dual-core RSI service with its tools and `/rsi` command in the running Host. The scheduled daemon cycles on fresh session activity — `/rsi run` only forces one immediately; the shipped fixture benchmark checks that the distilled policy carries verification guidance and stays inside the guidance budget, so it demonstrates the merge gate rather than end-task quality.
 
 -----
 

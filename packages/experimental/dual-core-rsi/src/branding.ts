@@ -15,6 +15,9 @@ export type RsiArchiveId = Branded<'rsi-archive'>
 /** Identity of one completed distillation cycle record. */
 export type RsiCycleId = Branded<'rsi-cycle'>
 
+/** Identity of one recorded daemon self-repair incident. */
+export type RsiIncidentId = Branded<'rsi-incident'>
+
 /**
  * Brand a string as an {@link RsiGenerationId}.
  * @param id - the raw generation id string.
@@ -40,4 +43,13 @@ export function RsiArchiveId(id: string): RsiArchiveId {
  */
 export function RsiCycleId(id: string): RsiCycleId {
   return brandString<RsiCycleId>(id)
+}
+
+/**
+ * Brand a string as an {@link RsiIncidentId}.
+ * @param id - the raw incident id string.
+ * @returns the same string with the incident-id brand.
+ */
+export function RsiIncidentId(id: string): RsiIncidentId {
+  return brandString<RsiIncidentId>(id)
 }

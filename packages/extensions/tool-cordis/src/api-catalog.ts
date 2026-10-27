@@ -1055,25 +1055,39 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'dualCoreRsi',
     summary: 'The dual-core RSI controller.',
-    description: 'The dual-core RSI controller. Owns the durable generation/archive/cycle domain, applies the active generation\'s artifacts to every live agent scope, runs daemon cycles, gates swaps on benchmark improvement, and executes rollback. Durable writes inside one operation settle through one final state-pointer write, so an interrupted operation leaves the previous pointer with at most orphan records.',
+    description: 'The dual-core RSI controller. Owns the durable generation/archive/cycle domain, applies the active generation\'s artifacts to every live agent scope, runs scheduled daemon cycles with per-attempt timeboxing and retry self-repair, parks gate-passing candidates as pending merge decisions, consults the human when the session exits, executes merge and decline, and records adopted generations in the local git ledger. Durable writes inside one operation settle through one final state-pointer write, so an interrupted operation leaves the previous pointer with at most orphan records.',
     methods: [
       {
         signature: 'async waitReady(): Promise<void>',
-        description: 'Resolve after the domain is loaded and live agents are attached.',
+        description: 'Resolve after the domain is loaded, live agents are attached, and the daemon is armed.',
         parameters: [],
       },
       {
         signature: 'async runCycle(trigger: RsiCycleTrigger, signal: AbortSignal): Promise<RsiCycleRecord>',
-        description: 'Run one daemon distillation cycle: digest the user core\'s recent sessions, distill a candidate artifact set, benchmark both cores, and swap past the configured improvement threshold. All durable writes happen after successful evaluation; the final state write is the commit point, so an interrupted cycle leaves the previous cores in place.',
+        description: 'Run one daemon distillation cycle: digest the user core\'s recent sessions, distill a candidate artifact set, benchmark both cores, and past the configured improvement threshold park the candidate as the pending merge candidate offered to the human. All durable writes happen after successful evaluation; the final state write is the commit point, so an interrupted cycle leaves the previous cores in place.',
         parameters: [{ name: 'trigger', description: 'what started the cycle.' }, { name: 'signal', description: 'cancellation signal; aborting fails the cycle without state changes.' }],
         returns: 'the settled cycle record.',
         throws: ['RsiError when a cycle is already running or no live agent can anchor distillation.'],
       },
       {
-        signature: 'async rollback(archiveId?: RsiArchiveId): Promise<{ restored: RsiGeneration; archived: RsiArchiveEntry }>',
-        description: 'Roll the user core back to one archived generation. The replaced generation is itself archived, so a rollback is reversible by another rollback.',
+        signature: 'async mergePending(source: RsiDecisionSource): Promise<RsiMergeResult>',
+        description: 'Merge the pending candidate: replace the active policy, archive the replaced surface, keep the better daemon lineage, re-apply artifacts, and record the adopted generation in the local git ledger.',
+        parameters: [{ name: 'source', description: 'where the human decision came from.' }],
+        returns: 'the settled merge result, including the ledger outcome.',
+        throws: ['RsiError when no candidate is pending.'],
+      },
+      {
+        signature: 'async declinePending(source: RsiDecisionSource): Promise<RsiDeclineResult>',
+        description: 'Decline the pending candidate: keep the active policy and clear the pending decision; the daemon lineage already kept its better score.',
+        parameters: [{ name: 'source', description: 'where the human decision came from.' }],
+        returns: 'the settled decline result.',
+        throws: ['RsiError when no candidate is pending.'],
+      },
+      {
+        signature: 'async rollback(archiveId?: RsiArchiveId): Promise<{ restored: RsiGeneration; archived: RsiArchiveEntry; ledger: RsiLedgerOutcome }>',
+        description: 'Roll the user core back to one archived generation. The replaced generation is itself archived and recorded in the git ledger, so a rollback is reversible by another rollback. A pending candidate does not survive a rollback: the human chose the restored policy over it.',
         parameters: [{ name: 'archiveId', description: 'archive to restore; omission restores the newest archive.' }],
-        returns: 'the restored generation and the newly created archive entry.',
+        returns: 'the restored generation, the newly created archive entry, and the ledger outcome.',
         throws: ['RsiError when the archive does not exist.'],
       },
       {
@@ -1083,8 +1097,8 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the status view.',
       },
       {
-        signature: 'async history(limit: number = 20): Promise<{ cycles: RsiCycleRecord[]; archives: RsiArchiveEntry[] }>',
-        description: 'List recent cycles and archives, newest first.',
+        signature: 'async history(limit: number = 20): Promise<{ cycles: RsiCycleRecord[]; archives: RsiArchiveEntry[]; incidents: RsiIncidentRecord[] }>',
+        description: 'List recent cycles, archives, and self-repair incidents, newest first.',
         parameters: [{ name: 'limit', description: 'maximum entries of each kind (default 20).' }],
         returns: 'bounded history.',
       },
@@ -6933,15 +6947,23 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RsiCycleOutcome',
-    declaration: 'export type RsiCycleOutcome = \'promoted\' | \'retained\';',
+    declaration: 'export type RsiCycleOutcome = \'promoted\' | \'retained\' | \'pending\';',
   },
   {
     name: 'RsiCycleRecord',
-    declaration: 'export interface RsiCycleRecord {\n    readonly id: RsiCycleId;\n    readonly trigger: RsiCycleTrigger;\n    readonly startedAt: number;\n    readonly settledAt: number;\n    readonly outcome: RsiCycleOutcome;\n    readonly baselineScore: number;\n    readonly candidateScore: number;\n    readonly improvement: number;\n    readonly threshold: number;\n    readonly candidateId: RsiGenerationId;\n    readonly rationale: string;\n}',
+    declaration: 'export interface RsiCycleRecord {\n    readonly id: RsiCycleId;\n    readonly trigger: RsiCycleTrigger;\n    readonly startedAt: number;\n    readonly settledAt: number;\n    readonly outcome: RsiCycleOutcome;\n    readonly baselineScore: number;\n    readonly candidateScore: number;\n    readonly improvement: number;\n    readonly threshold: number;\n    readonly candidateId: RsiGenerationId;\n    readonly rationale: string;\n    readonly decision?: RsiMergeDecision | undefined;\n    readonly decidedAt?: number | undefined;\n}',
   },
   {
     name: 'RsiCycleTrigger',
     declaration: 'export type RsiCycleTrigger = \'command\' | \'tool\' | \'schedule\';',
+  },
+  {
+    name: 'RsiDecisionSource',
+    declaration: 'export type RsiDecisionSource = \'command\' | \'consult\';',
+  },
+  {
+    name: 'RsiDeclineResult',
+    declaration: 'export interface RsiDeclineResult {\n    readonly cycle: RsiCycleRecord;\n    readonly source: RsiDecisionSource;\n}',
   },
   {
     name: 'RsiDistillInput',
@@ -6968,6 +6990,38 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type RsiGenerationOrigin = \'initial\' | \'distilled\';',
   },
   {
+    name: 'RsiIncidentId',
+    declaration: 'export type RsiIncidentId = Branded<\'rsi-incident\'>;',
+  },
+  {
+    name: 'RsiIncidentKind',
+    declaration: 'export type RsiIncidentKind = \'cycle-timeout\' | \'cycle-error\';',
+  },
+  {
+    name: 'RsiIncidentRecord',
+    declaration: 'export interface RsiIncidentRecord {\n    readonly id: RsiIncidentId;\n    readonly startedAt: number;\n    readonly settledAt: number;\n    readonly kind: RsiIncidentKind;\n    readonly detail: string;\n    readonly attempt: number;\n    readonly recovery: RsiIncidentRecovery;\n    readonly retryAfterMs: number;\n}',
+  },
+  {
+    name: 'RsiIncidentRecovery',
+    declaration: 'export type RsiIncidentRecovery = \'retried\' | \'deferred\';',
+  },
+  {
+    name: 'RsiLedgerOutcome',
+    declaration: 'export interface RsiLedgerOutcome {\n    readonly committed: boolean;\n    readonly revision?: string | undefined;\n    readonly error?: string | undefined;\n}',
+  },
+  {
+    name: 'RsiMergeDecision',
+    declaration: 'export type RsiMergeDecision = \'merged\' | \'declined\';',
+  },
+  {
+    name: 'RsiMergeResult',
+    declaration: 'export interface RsiMergeResult {\n    readonly generation: RsiGeneration;\n    readonly cycle: RsiCycleRecord;\n    readonly archived: RsiArchiveEntry;\n    readonly ledger: RsiLedgerOutcome;\n    readonly source: RsiDecisionSource;\n}',
+  },
+  {
+    name: 'RsiPendingCandidate',
+    declaration: 'export interface RsiPendingCandidate {\n    readonly generation: RsiGeneration;\n    readonly cycle: RsiCycleRecord;\n}',
+  },
+  {
     name: 'RsiSessionDigest',
     declaration: 'export interface RsiSessionDigest {\n    readonly assembledAt: number;\n    readonly sessions: readonly RsiSessionDigestEntry[];\n}',
   },
@@ -6981,7 +7035,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RsiStatusView',
-    declaration: 'export interface RsiStatusView {\n    readonly active: RsiGeneration;\n    readonly daemon: RsiGeneration;\n    readonly threshold: number;\n    readonly lastCycle?: RsiCycleRecord | undefined;\n    readonly cycleRunning: boolean;\n    readonly archiveCount: number;\n    readonly knowledgeCutoffAt?: number | undefined;\n    readonly unseenSessionCount: number;\n}',
+    declaration: 'export interface RsiStatusView {\n    readonly active: RsiGeneration;\n    readonly daemon: RsiGeneration;\n    readonly threshold: number;\n    readonly daemonEnabled: boolean;\n    readonly lastCycle?: RsiCycleRecord | undefined;\n    readonly pending?: RsiPendingCandidate | undefined;\n    readonly cycleRunning: boolean;\n    readonly archiveCount: number;\n    readonly incidents: readonly RsiIncidentRecord[];\n    readonly knowledgeCutoffAt?: number | undefined;\n    readonly unseenSessionCount: number;\n}',
   },
   {
     name: 'RunnerFailureRule',

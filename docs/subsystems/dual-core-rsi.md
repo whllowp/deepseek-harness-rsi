@@ -2,11 +2,11 @@
 
 English | [中文](dual-core-rsi.zh.md)
 
-Types shared by the experimental dual-core RSI service, its distiller and benchmark seams, and the `/rsi` command. The [dual-core RSI Agent Note](../../.agents/notes/implemented/architecture/2026-10-22-dual-core-rsi-mode.md) owns the two-core model, the swap gate, and rollback decisions; this page records the durable and client-visible forms from [`packages/experimental/dual-core-rsi/src/types.ts`](../../packages/experimental/dual-core-rsi/src/types.ts).
+Types shared by the experimental dual-core RSI service, its distiller and benchmark seams, and the `/rsi` command. The [dual-core RSI Agent Note](../../.agents/notes/implemented/architecture/2026-10-22-dual-core-rsi-mode.md) owns the two-core model and the [2026-10-28 note](../../.agents/notes/implemented/architecture/2026-10-28-dual-core-rsi-daemon-consult-merge.md) owns the scheduled daemon, the consult-gated merge, and the git ledger; this page records the durable and client-visible forms from [`packages/experimental/dual-core-rsi/src/types.ts`](../../packages/experimental/dual-core-rsi/src/types.ts).
 
 ## Generations and archives
 
-`RsiGenerationId`, `RsiArchiveId`, and `RsiCycleId` are [branded](core.md#branded-ids) strings minted by the service's durable counters. A generation carries one complete artifact set plus its latest benchmark evidence; an archive embeds the full pre-swap generation so rollback never depends on another record.
+`RsiGenerationId`, `RsiArchiveId`, `RsiCycleId`, and `RsiIncidentId` are [branded](core.md#branded-ids) strings minted by the service's durable counters. A generation carries one complete artifact set plus its latest benchmark evidence; an archive embeds the full pre-merge generation so rollback never depends on another record.
 
 ```ts type-equiv
 /** One distilled skill document in the improvable surface. */
@@ -67,9 +67,9 @@ interface RsiBenchmarkReport {
 }
 ```
 
-## Cycles and rollback
+## Cycles, decisions, and rollback
 
-Each settled cycle records its trigger, both scores, the improvement, and the distiller's one-line rationale. Rollback restores an archived generation and archives the replaced one with reason `rollback`, so every promotion and rollback is reversible.
+Each settled cycle records its trigger, both scores, the improvement, and the distiller's one-line rationale. A cycle whose candidate beats the threshold settles as `pending`; the human `merged` or `declined` decision is stamped onto the record when it settles. Rollback restores an archived generation, declines any still-pending offer, and archives the replaced one with reason `rollback`, so every merge and rollback is reversible.
 
 ```ts type-equiv
 /** Durable record of one completed daemon distillation cycle. */
@@ -93,6 +93,38 @@ interface RsiCycleRecord {
   readonly candidateId: RsiGenerationId
   /** One-line distiller rationale for the candidate artifact set. */
   readonly rationale: string
+  /** Human decision that settled a pending candidate; absent until decided. */
+  readonly decision?: RsiMergeDecision | undefined
+  /** Safe-integer epoch milliseconds of the decision; absent until decided. */
+  readonly decidedAt?: number | undefined
+}
+```
+
+## Self-repair incidents
+
+Every failed or timed-out scheduled attempt records one incident naming what broke, which attempt it was, and how the daemon recovered — retried with backoff or deferred to the next interval tick. The exit merge consult lists the incidents settled since the last decision as the session's fix points.
+
+```ts type-equiv
+/**
+ * Durable record of one scheduled daemon cycle attempt that failed and was
+ * recovered in-process: the daemon timeboxes every scheduled attempt, records
+ * what broke, retries with backoff, and defers to the next interval once the
+ * retry budget is spent, so a failing cycle never wedges the daemon.
+ */
+interface RsiIncidentRecord {
+  readonly id: RsiIncidentId
+  /** Safe-integer epoch milliseconds at the failed attempt's start. */
+  readonly startedAt: number
+  /** Safe-integer epoch milliseconds at failure settlement. */
+  readonly settledAt: number
+  readonly kind: RsiIncidentKind
+  /** Actionable failure report of the aborted or rejected attempt. */
+  readonly detail: string
+  /** 1-based attempt number inside the daemon round. */
+  readonly attempt: number
+  readonly recovery: RsiIncidentRecovery
+  /** Milliseconds the daemon waits before its next attempt or interval tick. */
+  readonly retryAfterMs: number
 }
 ```
 
@@ -108,18 +140,19 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 ### `ctx.dualCoreRsi` — `DualCoreRsiService`
 
-The dual-core RSI controller. Owns the durable generation/archive/cycle domain, applies the active generation's artifacts to every live agent scope, runs daemon cycles, gates swaps on benchmark improvement, and executes rollback. Durable writes inside one operation settle through one final state-pointer write, so an interrupted operation leaves the previous pointer with at most orphan records.
+The dual-core RSI controller. Owns the durable generation/archive/cycle domain, applies the active generation's artifacts to every live agent scope, runs scheduled daemon cycles with per-attempt timeboxing and retry self-repair, parks gate-passing candidates as pending merge decisions, consults the human when the session exits, executes merge and decline, and records adopted generations in the local git ledger. Durable writes inside one operation settle through one final state-pointer write, so an interrupted operation leaves the previous pointer with at most orphan records.
 
 ```ts cordis-catalog
-/** Resolve after the domain is loaded and live agents are attached. */
+/** Resolve after the domain is loaded, live agents are attached, and the daemon is armed. */
 async waitReady(): Promise<void>
 
 /**
  * Run one daemon distillation cycle: digest the user core's recent
  * sessions, distill a candidate artifact set, benchmark both cores, and
- * swap past the configured improvement threshold. All durable writes
- * happen after successful evaluation; the final state write is the commit
- * point, so an interrupted cycle leaves the previous cores in place.
+ * past the configured improvement threshold park the candidate as the
+ * pending merge candidate offered to the human. All durable writes happen
+ * after successful evaluation; the final state write is the commit point,
+ * so an interrupted cycle leaves the previous cores in place.
  * @param trigger - what started the cycle.
  * @param signal - cancellation signal; aborting fails the cycle without state changes.
  * @returns the settled cycle record.
@@ -128,14 +161,34 @@ async waitReady(): Promise<void>
 async runCycle(trigger: RsiCycleTrigger, signal: AbortSignal): Promise<RsiCycleRecord>
 
 /**
+ * Merge the pending candidate: replace the active policy, archive the
+ * replaced surface, keep the better daemon lineage, re-apply artifacts, and
+ * record the adopted generation in the local git ledger.
+ * @param source - where the human decision came from.
+ * @returns the settled merge result, including the ledger outcome.
+ * @throws RsiError when no candidate is pending.
+ */
+async mergePending(source: RsiDecisionSource): Promise<RsiMergeResult>
+
+/**
+ * Decline the pending candidate: keep the active policy and clear the
+ * pending decision; the daemon lineage already kept its better score.
+ * @param source - where the human decision came from.
+ * @returns the settled decline result.
+ * @throws RsiError when no candidate is pending.
+ */
+async declinePending(source: RsiDecisionSource): Promise<RsiDeclineResult>
+
+/**
  * Roll the user core back to one archived generation. The replaced
- * generation is itself archived, so a rollback is reversible by another
- * rollback.
+ * generation is itself archived and recorded in the git ledger, so a
+ * rollback is reversible by another rollback. A pending candidate does not
+ * survive a rollback: the human chose the restored policy over it.
  * @param archiveId - archive to restore; omission restores the newest archive.
- * @returns the restored generation and the newly created archive entry.
+ * @returns the restored generation, the newly created archive entry, and the ledger outcome.
  * @throws RsiError when the archive does not exist.
  */
-async rollback(archiveId?: RsiArchiveId): Promise<{ restored: RsiGeneration; archived: RsiArchiveEntry }>
+async rollback(archiveId?: RsiArchiveId): Promise<{ restored: RsiGeneration; archived: RsiArchiveEntry; ledger: RsiLedgerOutcome }>
 
 /**
  * Project the current dual-core state for tools and the command.
@@ -144,11 +197,11 @@ async rollback(archiveId?: RsiArchiveId): Promise<{ restored: RsiGeneration; arc
 async status(): Promise<RsiStatusView>
 
 /**
- * List recent cycles and archives, newest first.
+ * List recent cycles, archives, and self-repair incidents, newest first.
  * @param limit - maximum entries of each kind (default 20).
  * @returns bounded history.
  */
-async history(limit: number = 20): Promise<{ cycles: RsiCycleRecord[]; archives: RsiArchiveEntry[] }>
+async history(limit: number = 20): Promise<{ cycles: RsiCycleRecord[]; archives: RsiArchiveEntry[]; incidents: RsiIncidentRecord[] }>
 
 /**
  * Start one daemon cycle as a background job the daemon core owns; the

@@ -4,9 +4,9 @@
  * @module @deepseek-ai/dsh-experimental-dual-core-rsi/types
  */
 
-import type { RsiArchiveId, RsiCycleId, RsiGenerationId } from './branding.ts'
+import type { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId } from './branding.ts'
 
-export type { RsiArchiveId, RsiCycleId, RsiGenerationId }
+export type { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId }
 
 /**
  * How one generation's artifacts came to exist. `initial` generations are
@@ -77,8 +77,16 @@ export interface RsiGeneration {
 /** What triggered one daemon distillation cycle. */
 export type RsiCycleTrigger = 'command' | 'tool' | 'schedule'
 
-/** Terminal outcome of one daemon distillation cycle. */
-export type RsiCycleOutcome = 'promoted' | 'retained'
+/**
+ * Terminal outcome of one daemon distillation cycle. `pending` marks a
+ * candidate that beat the benchmark gate and waits for a human merge
+ * decision; `promoted` survives only on records written before merge
+ * decisions existed, when passing the gate swapped the cores immediately.
+ */
+export type RsiCycleOutcome = 'promoted' | 'retained' | 'pending'
+
+/** How a human settled one pending merge candidate. */
+export type RsiMergeDecision = 'merged' | 'declined'
 
 /** Durable record of one completed daemon distillation cycle. */
 export interface RsiCycleRecord {
@@ -101,6 +109,38 @@ export interface RsiCycleRecord {
   readonly candidateId: RsiGenerationId
   /** One-line distiller rationale for the candidate artifact set. */
   readonly rationale: string
+  /** Human decision that settled a pending candidate; absent until decided. */
+  readonly decision?: RsiMergeDecision | undefined
+  /** Safe-integer epoch milliseconds of the decision; absent until decided. */
+  readonly decidedAt?: number | undefined
+}
+
+/** What broke one scheduled daemon cycle attempt. */
+export type RsiIncidentKind = 'cycle-timeout' | 'cycle-error'
+
+/** How the daemon recovered from one recorded incident. */
+export type RsiIncidentRecovery = 'retried' | 'deferred'
+
+/**
+ * Durable record of one scheduled daemon cycle attempt that failed and was
+ * recovered in-process: the daemon timeboxes every scheduled attempt, records
+ * what broke, retries with backoff, and defers to the next interval once the
+ * retry budget is spent, so a failing cycle never wedges the daemon.
+ */
+export interface RsiIncidentRecord {
+  readonly id: RsiIncidentId
+  /** Safe-integer epoch milliseconds at the failed attempt's start. */
+  readonly startedAt: number
+  /** Safe-integer epoch milliseconds at failure settlement. */
+  readonly settledAt: number
+  readonly kind: RsiIncidentKind
+  /** Actionable failure report of the aborted or rejected attempt. */
+  readonly detail: string
+  /** 1-based attempt number inside the daemon round. */
+  readonly attempt: number
+  readonly recovery: RsiIncidentRecovery
+  /** Milliseconds the daemon waits before its next attempt or interval tick. */
+  readonly retryAfterMs: number
 }
 
 /**
@@ -174,6 +214,15 @@ export interface RsiBenchmarkRequest {
   readonly generation: RsiGeneration
 }
 
+/**
+ * The pending merge candidate presented to the human: the generation that
+ * beat the benchmark gate plus the cycle record that produced or kept it.
+ */
+export interface RsiPendingCandidate {
+  readonly generation: RsiGeneration
+  readonly cycle: RsiCycleRecord
+}
+
 /** Read-side projection of the whole dual-core state for tools and command. */
 export interface RsiStatusView {
   /** Current user-core generation. */
@@ -182,12 +231,18 @@ export interface RsiStatusView {
   readonly daemon: RsiGeneration
   /** Configured promotion threshold as a fraction. */
   readonly threshold: number
+  /** Whether the scheduled daemon driver is armed. */
+  readonly daemonEnabled: boolean
   /** Most recent completed cycle, when one exists. */
   readonly lastCycle?: RsiCycleRecord | undefined
+  /** Pending merge candidate awaiting a human decision, when one exists. */
+  readonly pending?: RsiPendingCandidate | undefined
   /** Whether a daemon cycle is currently running. */
   readonly cycleRunning: boolean
   /** Total rollback archives currently stored. */
   readonly archiveCount: number
+  /** Newest recorded daemon self-repair incidents, newest first. */
+  readonly incidents: readonly RsiIncidentRecord[]
   /** Wall-clock knowledge cutoff of the last settled cycle; absent for legacy state. */
   readonly knowledgeCutoffAt?: number | undefined
   /** Live sessions with activity newer than the knowledge cutoff. */

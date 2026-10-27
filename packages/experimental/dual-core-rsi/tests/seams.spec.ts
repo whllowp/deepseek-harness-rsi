@@ -7,10 +7,15 @@ import { SessionStore, SessionId } from '@deepseek-ai/dsh-session'
 import { SubagentRsiDistiller, RsiDistiller } from '../src/distiller.ts'
 import { FixtureRsiBenchmark, resolveFixtureCases } from '../src/benchmark.ts'
 import { decodeArtifacts, formatPercent, normalizeRationale, renderPolicySection } from '../src/policy.ts'
-import { renderCycleRecord, renderGeneration, renderHistory, renderRollback, renderStatus } from '../src/render.ts'
+import {
+  renderCycleRecord, renderDeclineResult, renderExitSummary, renderGeneration, renderHistory,
+  renderMergeResult, renderRollback, renderStatus,
+} from '../src/render.ts'
 import { assembleDigest, countUnseenSessions, rsiDigestProjectionDefinition, RSI_DIGEST_FOLD_TEXT_BUDGET } from '../src/digest.ts'
-import type { RsiArtifactBudgets, RsiCycleRecord, RsiDistillInput, RsiGeneration, RsiStatusView } from '../src/types.ts'
-import { RsiArchiveId, RsiCycleId, RsiGenerationId } from '../src/branding.ts'
+import type {
+  RsiArtifactBudgets, RsiCycleRecord, RsiDistillInput, RsiGeneration, RsiPendingCandidate, RsiStatusView,
+} from '../src/types.ts'
+import { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId } from '../src/branding.ts'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -524,43 +529,67 @@ describe('rendering', () => {
       active: base({}),
       daemon: base({ id: RsiGenerationId('gen-d') }),
       threshold: 0.05,
+      daemonEnabled: true,
       cycleRunning: true,
       lastCycle,
       archiveCount: 2,
+      incidents: [],
       knowledgeCutoffAt: 1_700_000_000_000,
       unseenSessionCount: 1,
     }
     const status = renderStatus(view)
     expect(status).toContain('guidance text and skills only')
     expect(status).toContain('User core: gen-r')
-    expect(status).toContain('Swap gate: promotion when benchmark improvement exceeds +5.0%')
+    expect(status).toContain('Swap gate: a merge is offered when benchmark improvement exceeds +5.0%')
+    expect(status).toContain('Daemon: scheduled ticks armed')
     expect(status).toContain('Cycle: running')
     expect(status).toContain('Knowledge current as of: 2023-11-14T22:13:20.000Z')
     expect(status).toContain('1 live session changed since the last cycle.')
     expect(status).toContain('a cycle is running right now')
     expect(status).toContain('improvement +50.0%')
     expect(status).toContain('…')
+    const disabled = renderStatus({ ...view, daemonEnabled: false })
+    expect(disabled).toContain('Daemon: disabled (daemonEnabled: false)')
     const pluralFresh = renderStatus({ ...view, unseenSessionCount: 3 })
     expect(pluralFresh).toContain('3 live sessions changed since the last cycle.')
 
     const cycle = renderCycleRecord(lastCycle)
     expect(cycle).toContain('cycle 1 (command) adopted a new working policy')
-    expect(cycle).toContain('your agent uses it from its next request')
+    expect(cycle).toContain('records predate merge decisions')
     const retained = renderCycleRecord({ ...lastCycle, outcome: 'retained' })
     expect(retained).toContain('kept the current policy')
+    const waiting = renderCycleRecord({ ...lastCycle, outcome: 'pending' })
+    expect(waiting).toContain('waits for your merge decision')
+    const merged = renderCycleRecord({ ...lastCycle, outcome: 'pending', decision: 'merged', decidedAt: 3 })
+    expect(merged).toContain('the user merged it')
+    const declined = renderCycleRecord({ ...lastCycle, outcome: 'pending', decision: 'declined', decidedAt: 3 })
+    expect(declined).toContain('the user declined it')
 
-    const empty = renderHistory([], [])
+    const empty = renderHistory([], [], [])
     expect(empty).toContain('No completed cycles yet.')
+    expect(empty).not.toContain('Self-repair incidents')
     const withArchive = renderHistory([], [{
       id: RsiArchiveId('arc-1'),
       archivedAt: 1,
       generation: base({}),
       supersededBy: RsiGenerationId('gen-9'),
       reason: 'swap',
-    }])
+    }], [])
     expect(withArchive).toContain('archive arc-1 [swap]')
     expect(withArchive).toContain('score n/a')
     expect(withArchive).toContain('Restore one with /rsi rollback <archive id>')
+    const withIncident = renderHistory([], [], [{
+      id: RsiIncidentId('inc-2'),
+      startedAt: 1,
+      settledAt: 2,
+      kind: 'cycle-timeout',
+      detail: 'the scheduled cycle exceeded cycleTimeoutMs (10ms)',
+      attempt: 1,
+      recovery: 'deferred',
+      retryAfterMs: 600_000,
+    }])
+    expect(withIncident).toContain('Self-repair incidents (newest first):')
+    expect(withIncident).toContain('inc inc-2 [cycle-timeout] attempt 1 deferred 600000ms to the next interval')
 
     const rollback = renderRollback(base({}), {
       id: RsiArchiveId('arc-2'),
@@ -568,9 +597,140 @@ describe('rendering', () => {
       generation: base({ id: RsiGenerationId('gen-x') }),
       supersededBy: RsiGenerationId('gen-r'),
       reason: 'rollback',
-    })
+    }, { committed: true, revision: 'abc123' })
     expect(rollback).toContain('Rolled back the user core to gen-r')
     expect(rollback).toContain('from its next request')
+    expect(rollback).toContain('The local git ledger recorded the restore.')
+    const ledgerless = renderRollback(base({}), {
+      id: RsiArchiveId('arc-3'),
+      archivedAt: 1,
+      generation: base({ id: RsiGenerationId('gen-x') }),
+      supersededBy: RsiGenerationId('gen-r'),
+      reason: 'rollback',
+    }, { committed: false, error: 'git is missing' })
+    expect(ledgerless).toContain('could not record the restore (git is missing)')
+  })
+
+  it('renders the pending candidate, the exit summary, and the merge and decline decisions', () => {
+    const cycle: RsiCycleRecord = {
+      id: RsiCycleId('4'),
+      trigger: 'schedule',
+      startedAt: 1,
+      settledAt: 2,
+      outcome: 'pending',
+      baselineScore: 0.2,
+      candidateScore: 0.9,
+      improvement: 0.7,
+      threshold: 0.05,
+      candidateId: RsiGenerationId('gen-7'),
+      rationale: 'two verify habits repeated across sessions',
+    }
+    const pending: RsiPendingCandidate = {
+      generation: base({
+        id: RsiGenerationId('gen-7'),
+        artifacts: {
+          guidance: ['verify each edit with focused tests'],
+          skills: [{ name: 'verify-before-done', description: 'd', content: 'c' }],
+        },
+        benchmark: { provider: 'fixture', scoredAt: 1, score: 0.9, cases: [] },
+      }),
+      cycle,
+    }
+    const view: RsiStatusView = {
+      active: base({}),
+      daemon: base({ id: RsiGenerationId('gen-d') }),
+      threshold: 0.05,
+      daemonEnabled: true,
+      cycleRunning: false,
+      lastCycle: cycle,
+      pending,
+      archiveCount: 1,
+      incidents: [{
+        id: RsiIncidentId('inc-1'),
+        startedAt: 1,
+        settledAt: 2,
+        kind: 'cycle-error',
+        detail: 'distiller offline',
+        attempt: 1,
+        recovery: 'retried',
+        retryAfterMs: 30_000,
+      }],
+      unseenSessionCount: 0,
+    }
+    const status = renderStatus(view)
+    expect(status).toContain('Pending merge: gen-7 from cycle 4 (scored 0.900 against 0.200)')
+    expect(status).toContain('skills: verify-before-done')
+    expect(status).toContain('Self-repair (newest first): inc inc-1 [cycle-error] attempt 1 retried after 30000ms')
+    expect(status).toContain('Next: /rsi merge adopts the pending policy and records it in the local git ledger')
+    const skillless = renderStatus({
+      ...view,
+      pending: {
+        generation: base({ id: RsiGenerationId('gen-8'), artifacts: { guidance: ['one habit'], skills: [] } }),
+        cycle: { ...cycle, candidateId: RsiGenerationId('gen-8') },
+      },
+    })
+    expect(skillless).toContain('Pending merge: gen-8 from cycle 4 (scored 0.900 against 0.200): 1 guidance line\n')
+
+    const summary = renderExitSummary(pending, view.incidents, 0.05)
+    expect(summary).toContain('Dual-core RSI session summary')
+    expect(summary).toContain('Improvement points — pending policy gen-7 from cycle 4')
+    expect(summary).toContain('improvement +70.0% vs threshold +5.0%')
+    expect(summary).toContain('rationale: two verify habits repeated across sessions')
+    expect(summary).toContain('Fix points — daemon self-repairs since the last decision (newest first):')
+    expect(summary).toContain('inc inc-1 [cycle-error] attempt 1 retried after 30000ms: distiller offline')
+    expect(summary).toContain('records the change in the local git ledger for rollback')
+    const clean = renderExitSummary(pending, [], 0.05)
+    expect(clean).toContain('none; every scheduled attempt settled without repair')
+
+    const merged = renderMergeResult({
+      generation: pending.generation,
+      cycle,
+      archived: {
+        id: RsiArchiveId('arc-1'),
+        archivedAt: 3,
+        generation: base({}),
+        supersededBy: RsiGenerationId('gen-7'),
+        reason: 'swap',
+      },
+      ledger: { committed: true, revision: 'abc123' },
+      source: 'command',
+    })
+    expect(merged).toContain("Merged gen-7 into your agent's working policy via /rsi merge (cycle 4, score 0.900)")
+    expect(merged).toContain('archived as arc-1')
+    expect(merged).toContain('git ledger recorded commit abc123')
+    const consulted = renderMergeResult({
+      generation: pending.generation,
+      cycle,
+      archived: {
+        id: RsiArchiveId('arc-1'),
+        archivedAt: 3,
+        generation: base({}),
+        supersededBy: RsiGenerationId('gen-7'),
+        reason: 'swap',
+      },
+      ledger: { committed: false, error: 'git is missing' },
+      source: 'consult',
+    })
+    expect(consulted).toContain('via the exit consult')
+    expect(consulted).toContain('could not record the change (git is missing)')
+    const unevidenced = renderMergeResult({
+      generation: base({ id: RsiGenerationId('gen-9') }),
+      cycle,
+      archived: {
+        id: RsiArchiveId('arc-1'),
+        archivedAt: 3,
+        generation: base({}),
+        supersededBy: RsiGenerationId('gen-9'),
+        reason: 'swap',
+      },
+      ledger: { committed: true, revision: 'abc123' },
+      source: 'command',
+    })
+    expect(unevidenced).toContain('cycle 4, score n/a')
+
+    const declined = renderDeclineResult({ cycle, source: 'consult' })
+    expect(declined).toContain('Kept the current policy via the exit consult')
+    expect(declined).toContain('cycle 4')
   })
 
   it('guides a first-time user through the empty state and freshness nudges', () => {
@@ -578,15 +738,19 @@ describe('rendering', () => {
       active: base({}),
       daemon: base({ id: RsiGenerationId('gen-d') }),
       threshold: 0.05,
+      daemonEnabled: true,
       cycleRunning: false,
       archiveCount: 0,
+      incidents: [],
       unseenSessionCount: 0,
     }
     const status = renderStatus(view)
     expect(status).toContain('nothing has been distilled yet')
-    expect(status).toContain('then run /rsi run')
+    expect(status).toContain('The scheduled daemon starts cycling as you work; /rsi run starts one immediately.')
     expect(status).toContain('Each cycle runs one fresh model child and spends tokens.')
     expect(status).not.toContain('Knowledge current as of:')
+    const manualOnly = renderStatus({ ...view, daemonEnabled: false })
+    expect(manualOnly).toContain('Run /rsi run to start one.')
 
     const settledView: RsiStatusView = {
       ...view,
@@ -606,15 +770,17 @@ describe('rendering', () => {
       },
     }
     const withoutArchives = renderStatus(settledView)
-    expect(withoutArchives).toContain('Next: /rsi run starts another cycle')
+    expect(withoutArchives).toContain('Next: the daemon keeps cycling as new session activity arrives')
     expect(withoutArchives).not.toContain('/rsi rollback restores')
 
     const withArchives = renderStatus({ ...settledView, archiveCount: 1 })
-    expect(withArchives).toContain('/rsi rollback restores the policy in place before the last adoption')
+    expect(withArchives).toContain('/rsi rollback restores the policy in place before the last merge')
 
     const unseenView: RsiStatusView = { ...settledView, unseenSessionCount: 2 }
     const unseen = renderStatus(unseenView)
     expect(unseen).toContain('2 live sessions changed since the last cycle.')
-    expect(unseen).toContain('Next: that activity is not in the current policy yet; /rsi run refreshes it')
+    expect(unseen).toContain('Next: that activity is not in the current policy yet; the scheduled daemon folds it into its next tick, and /rsi run refreshes it now (each cycle runs one fresh model child and spends tokens.).')
+    const manualUnseen = renderStatus({ ...unseenView, daemonEnabled: false })
+    expect(manualUnseen).toContain('Next: that activity is not in the current policy yet; /rsi run refreshes it (each cycle runs one fresh model child and spends tokens.).')
   })
 })

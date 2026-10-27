@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.1-rc.2/dual-core-rsi-consult-merge/guide.md
+/:
+  en: 00286101c672dc55
+  zh: 8dc04ae84cfe0107
+/dual-core-rsi-daemonizes-and-gates-every-swap-on-a-human-merge-decision:
+  en: b2ea75d1ea76803d
+  zh: 0aa963aeb58cca69
+/dual-core-rsi-daemonizes-and-gates-every-swap-on-a-human-merge-decision/change:
+  en: f8f6f00ed444f4f2
+  zh: 6085372bb005b159
+/dual-core-rsi-daemonizes-and-gates-every-swap-on-a-human-merge-decision/migration:
+  en: a68f2f59d5442fc6
+  zh: 2df19efa9f695a75

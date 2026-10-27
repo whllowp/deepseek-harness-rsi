@@ -7,10 +7,10 @@
 
 import { z } from 'zod'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
-import { RsiArchiveId, RsiCycleId, RsiGenerationId } from './branding.ts'
+import { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId } from './branding.ts'
 import type {
   RsiArchiveEntry, RsiBenchmarkCaseResult, RsiBenchmarkReport, RsiCycleRecord,
-  RsiGeneration, RsiSkillArtifact,
+  RsiGeneration, RsiIncidentRecord, RsiSkillArtifact,
 } from './types.ts'
 
 const instantSchema = z.number().int().nonnegative()
@@ -62,13 +62,26 @@ const cycleSchema = z.object({
   trigger: z.enum(['command', 'tool', 'schedule']),
   startedAt: instantSchema,
   settledAt: instantSchema,
-  outcome: z.enum(['promoted', 'retained']),
+  outcome: z.enum(['promoted', 'retained', 'pending']),
   baselineScore: z.number().min(0).max(1),
   candidateScore: z.number().min(0).max(1),
   improvement: z.number().min(-1).max(1),
   threshold: z.number().min(0).max(1),
   candidateId: z.string().min(1).transform(RsiGenerationId),
   rationale: z.string(),
+  decision: z.enum(['merged', 'declined']).optional(),
+  decidedAt: instantSchema.optional(),
+}).strict()
+
+const incidentSchema = z.object({
+  id: z.string().min(1).transform(RsiIncidentId),
+  startedAt: instantSchema,
+  settledAt: instantSchema,
+  kind: z.enum(['cycle-timeout', 'cycle-error']),
+  detail: z.string(),
+  attempt: z.number().int().positive(),
+  recovery: z.enum(['retried', 'deferred']),
+  retryAfterMs: z.number().int().nonnegative(),
 }).strict()
 
 const stateSchema = z.object({
@@ -79,6 +92,12 @@ const stateSchema = z.object({
   archiveCounter: z.number().int().nonnegative(),
   /** Wall-clock knowledge cutoff of the last settled cycle; absent in pre-freshness records. */
   knowledgeCutoffAt: z.number().int().nonnegative().optional(),
+  /** Generation awaiting a human merge decision; absent while none waits. */
+  pendingCandidateId: z.string().min(1).transform(RsiGenerationId).optional(),
+  /** Wall clock of the last merge or decline decision; absent before the first decision. */
+  lastDecisionAt: z.number().int().nonnegative().optional(),
+  /** Monotonic incident id counter; absent in pre-incident records and read as zero. */
+  incidentCounter: z.number().int().nonnegative().optional(),
 }).strict()
 
 /**
@@ -87,7 +106,11 @@ const stateSchema = z.object({
  */
 export const RSI_STATE_KEY = 'main'
 
-/** Authoritative dual-core RSI storage; malformed records reject opening the domain. */
+/**
+ * Authoritative dual-core RSI storage; malformed records reject opening the
+ * domain. Optional fields decode when absent, so records written before
+ * merge decisions and incident tracking existed still open.
+ */
 export const dualCoreRsiDomain = defineDomain({
   name: 'dual_core_rsi',
   version: 1,
@@ -96,6 +119,7 @@ export const dualCoreRsiDomain = defineDomain({
     generations: domainTable<RsiGenerationId, RsiGeneration>(generationSchema),
     archives: domainTable<RsiArchiveId, RsiArchiveEntry>(archiveSchema),
     cycles: domainTable<RsiCycleId, RsiCycleRecord>(cycleSchema),
+    incidents: domainTable<RsiIncidentId, RsiIncidentRecord>(incidentSchema),
   },
 })
 
@@ -108,5 +132,6 @@ export type {
   RsiBenchmarkReport,
   RsiCycleRecord,
   RsiGeneration,
+  RsiIncidentRecord,
   RsiSkillArtifact,
 }

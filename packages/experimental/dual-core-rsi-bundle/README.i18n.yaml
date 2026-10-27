@@ -3,20 +3,20 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/experimental/dual-core-rsi-bundle/README.md
 /:
-  en: ecff9a897e626fc6
-  zh: 12515cb2bf1b40c6
+  en: 8df81f918471ce21
+  zh: 65edd3d387f49000
 /deepseek-ai-dsh-experimental-dual-core-rsi-bundle:
   en: 0e23f3fe9516703d
   zh: 8d430d92c55a4723
 /deepseek-ai-dsh-experimental-dual-core-rsi-bundle/summary:
-  en: 0063624a320b193c
-  zh: d301da435031625b
+  en: eeb23b3d7a1e90aa
+  zh: b3cd033cb5353b6b
 /deepseek-ai-dsh-experimental-dual-core-rsi-bundle/table-of-contents:
   en: d152484eb41ac6b4
   zh: ffab54373e9e61f0
 /deepseek-ai-dsh-experimental-dual-core-rsi-bundle/use-this-package:
-  en: 6b221fca457192e7
-  zh: b4be99abd784907a
+  en: 6b241de1d424222b
+  zh: 25c84149107f9392
 /deepseek-ai-dsh-experimental-dual-core-rsi-bundle/understand-the-implementation:
   en: 54a4a04d45d4fb1a
   zh: 6f12c8120a7c10ca
