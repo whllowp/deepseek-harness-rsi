@@ -1,0 +1,97 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/experimental/dual-core-rsi/README.md
+/:
+  en: a72b67242fd2db9e
+  zh: 77b70dd28209708b
+/deepseek-ai-dsh-experimental-dual-core-rsi:
+  en: b0445cc0ff118209
+  zh: 5c6a1e3083820787
+/deepseek-ai-dsh-experimental-dual-core-rsi/summary:
+  en: e50c22bed6fc9720
+  zh: f5cdb1230bc54aeb
+/deepseek-ai-dsh-experimental-dual-core-rsi/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: ffab54373e9e61f0
+/deepseek-ai-dsh-experimental-dual-core-rsi/use-this-package:
+  en: a281f32ed8a60bef
+  zh: 2a70677aa9f1d45a
+/deepseek-ai-dsh-experimental-dual-core-rsi/use-this-package/driving-the-daemon:
+  en: 610a490eac335c6c
+  zh: cddb9794b3bd7a55
+/deepseek-ai-dsh-experimental-dual-core-rsi/use-this-package/what-a-cycle-does:
+  en: 938affa0e9e4451e
+  zh: c971695e99738e0e
+/deepseek-ai-dsh-experimental-dual-core-rsi/use-this-package/knowing-when-the-policy-went-stale:
+  en: 75bc10f556d5d17e
+  zh: f6609c68dabf32e7
+/deepseek-ai-dsh-experimental-dual-core-rsi/use-this-package/config:
+  en: eb1fe27e29fce72c
+  zh: 2352ebcf602aef10
+/deepseek-ai-dsh-experimental-dual-core-rsi/understand-the-implementation:
+  en: b437f2045c03748a
+  zh: 1deee4882d9958cc
+/deepseek-ai-dsh-experimental-dual-core-rsi/understand-the-implementation/two-cores-over-one-harness:
+  en: d2720178e007f818
+  zh: 702c021b85c4360d
+/deepseek-ai-dsh-experimental-dual-core-rsi/understand-the-implementation/seams:
+  en: 169360d83654040c
+  zh: 223f0ac851e57ddd
+/deepseek-ai-dsh-experimental-dual-core-rsi/understand-the-implementation/durability-and-rollback:
+  en: fc0120d7ce3cf102
+  zh: 3f900076a7a0c0a7
+/deepseek-ai-dsh-experimental-dual-core-rsi/understand-the-implementation/source-map:
+  en: 6892965c2d08d04f
+  zh: c6dee904fc7bb769
+/deepseek-ai-dsh-experimental-dual-core-rsi/further-exploration:
+  en: 19857f1d68b3f104
+  zh: b12736aa78519510
+/deepseek-ai-dsh-experimental-dual-core-rsi/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-experimental-dual-core-rsi/model-experience/system-prompt:
+  en: cf78b9dd5596495f
+  zh: bd44560f8c2435e8
+/deepseek-ai-dsh-experimental-dual-core-rsi/model-experience/system-prompt/what-the-model-sees:
+  en: 841e0f90ebd6ceb0
+  zh: 5fb4544f5d0f5c21
+/deepseek-ai-dsh-experimental-dual-core-rsi/model-experience/system-prompt/what-the-model-sees/distilled-policy-section-example:
+  en: 6987924acd6d0010
+  zh: 6987924acd6d0010
+/deepseek-ai-dsh-experimental-dual-core-rsi/model-experience/system-prompt/token-effect:
+  en: c86b0c9ba27bb261
+  zh: b64516c6c8fdbc5c
+/deepseek-ai-dsh-experimental-dual-core-rsi/model-experience/system-prompt/kv-cache-effect:
+  en: b64ec669633c3490
+  zh: 9dc658b3ecd373bb
+/deepseek-ai-dsh-experimental-dual-core-rsi/model-experience/tool-schemas:
+  en: 3039bc5e7a796b21
+  zh: 6b7a9eaf69c9ea53
+/deepseek-ai-dsh-experimental-dual-core-rsi/model-experience/tool-schemas/what-the-model-sees:
+  en: 2e15968d70082c4a
+  zh: c4ddabc9c190ebe1
+/deepseek-ai-dsh-experimental-dual-core-rsi/model-experience/tool-schemas/token-effect:
+  en: 21d05e8906ac17e2
+  zh: e4966b0712b73944
+/deepseek-ai-dsh-experimental-dual-core-rsi/model-experience/tool-schemas/kv-cache-effect:
+  en: daf8faf62ca9b777
+  zh: 42d0feaa756f0b34
+/deepseek-ai-dsh-experimental-dual-core-rsi/model-experience/daemon-requests:
+  en: 54e8178580e65305
+  zh: a3f25675b77d2c49
+/deepseek-ai-dsh-experimental-dual-core-rsi/model-experience/daemon-requests/what-the-model-sees:
+  en: 779a93bca1cea627
+  zh: 8a7bc7c719249e4f
+/deepseek-ai-dsh-experimental-dual-core-rsi/model-experience/daemon-requests/token-effect:
+  en: 973cdca319322900
+  zh: 90c2b7ff21ae14d4
+/deepseek-ai-dsh-experimental-dual-core-rsi/model-experience/daemon-requests/kv-cache-effect:
+  en: 755ae9163236296a
+  zh: e440d65678dd97a9
+/deepseek-ai-dsh-experimental-dual-core-rsi/known-limitations-and-deferred-work:
+  en: 59ed2d35ad1e1484
+  zh: 3cc799b6597d589e
+/deepseek-ai-dsh-experimental-dual-core-rsi/known-limitations-and-deferred-work/dev-note:
+  en: 4148ffcc4823f8c7
+  zh: bbced7540d483727

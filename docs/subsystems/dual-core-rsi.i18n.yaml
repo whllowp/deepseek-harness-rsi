@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for dual-core-rsi.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/subsystems/dual-core-rsi.md
+/dual-core-rsi:
+  en: 8452f520aa9f779d
+  zh: 47a8027b392cafba
+/dual-core-rsi/generations-and-archives:
+  en: fe1e49e6f01489f9
+  zh: 051d7013dcb173d6
+/dual-core-rsi/benchmark-evidence:
+  en: 330aec1db81020df
+  zh: 36414045b31a85ed
+/dual-core-rsi/cycles-and-rollback:
+  en: 105bf699869d3c6e
+  zh: f97a0b8801a25866

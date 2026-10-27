@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Dual-core RSI",
+    "description": "A daemon core learns from your recent sessions and adopts a better working policy only when it clearly scores better. It changes guidance text and skills only; /rsi rollback undoes any adoption."
+  }
+}
