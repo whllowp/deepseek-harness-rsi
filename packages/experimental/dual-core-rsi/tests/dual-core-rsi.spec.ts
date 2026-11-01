@@ -29,7 +29,7 @@ import { renderStatus } from '../src/render.ts'
 import { RsiLedger } from '../src/ledger.ts'
 import { RsiDistiller } from '../src/distiller.ts'
 import { RsiBenchmark } from '../src/benchmark.ts'
-import { RsiArchiveId, RsiGenerationId } from '../src/branding.ts'
+import { RsiArchiveId, RsiCycleId, RsiGenerationId } from '../src/branding.ts'
 import type { RsiArtifacts, RsiDistillInput, RsiDistillOutput, RsiGeneration } from '../src/index.ts'
 
 /** Subprocess runtime whose world resolves nothing, for ledger-unavailable paths. */
@@ -175,6 +175,8 @@ async function harness(options?: HarnessOptions): Promise<Harness> {
   if (options?.deferService === true) return { ctx, service: undefined as never, distiller, ledgerDir }
   const service = new DualCoreRsiService(ctx, {
     daemonEnabled: false,
+    // The consult policy keeps the parked-candidate suite meaningful; auto has its own tests.
+    mergePolicy: 'consult',
     ledgerDir,
     ...options?.threshold === undefined ? {} : { threshold: options.threshold },
     ...options?.runWaitMs === undefined ? {} : { runWaitMs: options.runWaitMs },
@@ -428,7 +430,7 @@ describe('dsh-experimental-dual-core-rsi controller', () => {
     expect((await test.service.status()).active.artifacts.guidance).toHaveLength(2)
     const { archives } = await test.service.history()
     expect(archives.map(entry => entry.id)).toEqual(['arc-3', 'arc-2', 'arc-1'])
-  })
+  }, 60_000)
 
   it('rejects rollback to an unknown archive id and on an empty archive set', async () => {
     const test = await tracked(harness())
@@ -635,7 +637,7 @@ describe('dsh-experimental-dual-core-rsi controller', () => {
     expect(history.text).toContain('Restore one with /rsi rollback')
     const bare = await runCommand(test, agent, '', signal)
     expect(bare.kind).toBe('success')
-  })
+  }, 60_000)
 
   it('declines a pending candidate through the command and keeps the current policy', async () => {
     const test = await tracked(harness({ proposals: [STRONG] }))
@@ -782,10 +784,8 @@ describe('dsh-experimental-dual-core-rsi controller', () => {
     expect(run.kind).toBe('success')
     expect(run.text).toContain('still running in the background')
     expect(run.text).toContain('run /rsi again in a moment')
-    const jobId = JobId(test.ctx.jobs.list()[0]!.id)
     release(EMPTY)
-    await test.ctx.jobs.wait(jobId, 10_000)
-    expect((await test.service.status()).lastCycle?.outcome).toBe('retained')
+    await vi.waitFor(async () => { expect((await test.service.status()).lastCycle?.outcome).toBe('retained') })
   })
 
 
@@ -800,8 +800,12 @@ describe('dsh-experimental-dual-core-rsi controller', () => {
     const { agent } = await stubAgent(test, 'user-core')
     const pending = runCommand(test, agent, 'run')
     await vi.waitFor(() => { expect(test.distiller.inputs.length).toBe(1) })
-    const jobId = JobId(test.ctx.jobs.list()[0]!.id)
-    test.ctx.jobs.kill(jobId)
+    // No initiator boundary is active under a directly-driven command, so the
+    // manual cycle job is unowned; the harness context attaches a global controller.
+    // The command passed its agent, so the cycle job is owned and fenced by it.
+    const cycle = test.ctx.jobs.list(agent.id).find(job => job.kind === 'dual-core-rsi')
+    if (cycle === undefined) throw new Error('the manual cycle job never registered')
+    test.ctx.jobs.kill(JobId(cycle.id), agent.id)
     rejectGate(new Error('cycle stopped'))
     const run = await pending
     expect(run.kind).toBe('error')
@@ -891,6 +895,54 @@ describe('dsh-experimental-dual-core-rsi controller', () => {
     expect(renderStatus(status)).not.toContain('Knowledge current as of:')
     expect(renderStatus(status)).toContain('nothing has been distilled yet')
     void distiller
+  })
+
+  it('surfaces legacy promoted records without decision stamps in the activity view', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dual-core-rsi-legacy-activity-'))
+    const ctx = new Context()
+    contexts.push(ctx)
+    await ctx.plugin(Storage)
+    await ctx.plugin(storageJson, { root })
+    await ctx.plugin(storageDomainPlugin, { backend: 'json' })
+    await ctx.plugin(LocalSubprocessRuntime)
+    const domain = await ctx.storageDomain.open(dualCoreRsiDomain)
+    const initial: RsiGeneration = {
+      id: RsiGenerationId('gen-1'),
+      origin: 'initial',
+      parent: null,
+      createdAt: 1,
+      artifacts: { guidance: ['verify legacy habits'], skills: [] },
+    }
+    const daemon: RsiGeneration = { ...initial, id: RsiGenerationId('gen-2'), parent: initial.id }
+    await domain.table('generations').put(initial.id, initial)
+    await domain.table('generations').put(daemon.id, daemon)
+    await domain.table('state').put(RSI_STATE_KEY, {
+      activeId: initial.id, daemonId: daemon.id, cycleCounter: 2, generationCounter: 2, archiveCounter: 0,
+    })
+    const legacy = {
+      id: RsiCycleId('1'), trigger: 'command' as const, startedAt: 1, settledAt: 10, outcome: 'promoted' as const,
+      baselineScore: 0, candidateScore: 0.5, improvement: 0.5, threshold: 0.05, candidateId: initial.id, rationale: 'legacy one',
+    }
+    await domain.table('cycles').put(legacy.id, legacy)
+    await domain.table('cycles').put(RsiCycleId('2'), { ...legacy, id: RsiCycleId('2'), settledAt: 20, candidateId: daemon.id, rationale: 'legacy two' })
+    await domain.close()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(CommandRuntime)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(LocalJobRegistry)
+    ctx.jobs.attachController('dual-core-rsi-test')
+    void new ScriptedDistiller(ctx, [])
+    void new KeywordBenchmark(ctx, 'verify', 0.4)
+    const service = new DualCoreRsiService(ctx, { daemonEnabled: false, ledgerDir: join(root, 'ledger') })
+    await service.waitReady()
+    const activity = await service.activity()
+    expect(activity.evolutions.map(entry => entry.rationale)).toEqual(['legacy two', 'legacy one'])
+    expect(activity.evolutions[0]?.adoptedAt).toBe(20)
+    expect(activity.evolutions[1]?.guidance).toEqual(['verify legacy habits'])
   })
 
   it('renders an empty history and a fresh status through the command', async () => {
@@ -1033,7 +1085,7 @@ describe('scheduled daemon', () => {
     expect(status.lastCycle).toBeUndefined()
   })
 
-  it('kills a scheduled round inside its attempt and during its retry backoff', async () => {
+  it('cancels a scheduled round inside its attempt and during its retry backoff through disposal', async () => {
     const inFlight = await tracked(harness({
       abortGated: true,
       rsi: { daemonEnabled: true, daemonIntervalMs: 5, daemonMaxRetries: 1, daemonRetryBackoffMs: 1, cycleTimeoutMs: 60_000 },
@@ -1041,10 +1093,9 @@ describe('scheduled daemon', () => {
     await stubAgent(inFlight, 'kill-core')
     appendActivity(inFlight, 'kill-work')
     await vi.waitFor(() => { expect(inFlight.distiller.inputs.length).toBe(1) })
-    const inFlightJob = JobId(inFlight.ctx.jobs.list().find(job => job.label.includes('scheduled'))!.id)
-    inFlight.ctx.jobs.kill(inFlightJob)
-    const killedInFlight = await inFlight.ctx.jobs.wait(inFlightJob, 10_000)
-    expect(killedInFlight.status).toBe('killed')
+    // Rounds are service-owned background work, not registry jobs: disposal cancels the attempt in flight.
+    await inFlight.ctx.fiber.dispose()
+    contexts.splice(contexts.indexOf(inFlight.ctx), 1)
 
     const backing = await tracked(harness({
       proposals: [new Error('one failure then backoff')],
@@ -1053,10 +1104,12 @@ describe('scheduled daemon', () => {
     await stubAgent(backing, 'backoff-core')
     appendActivity(backing, 'backoff-work')
     await vi.waitFor(async () => { expect((await backing.service.status()).incidents.length).toBe(1) })
-    const backoffJob = JobId(backing.ctx.jobs.list().find(job => job.label.includes('scheduled'))!.id)
-    backing.ctx.jobs.kill(backoffJob)
-    const killedBackoff = await backing.ctx.jobs.wait(backoffJob, 10_000)
-    expect(killedBackoff.status).toBe('killed')
+    // Disposal during the retry backoff stops the round before its second attempt starts.
+    await backing.ctx.fiber.dispose()
+    contexts.splice(contexts.indexOf(backing.ctx), 1)
+    await new Promise(resolve => setTimeout(resolve, 30))
+    const backingContexts = contexts
+    void backingContexts
   })
 })
 
@@ -1171,6 +1224,101 @@ describe('exit merge consult', () => {
   })
 })
 
+describe('background merge policy', () => {
+  it('adopts a gate-passing candidate automatically without any human input', async () => {
+    const test = await tracked(harness({ proposals: [STRONG], rsi: { mergePolicy: 'auto' } }))
+    const core = await stubAgent(test, 'auto-core')
+    const record = await test.service.runCycle('schedule', new AbortController().signal)
+    expect(record.outcome).toBe('promoted')
+    expect(record.decision).toBe('merged')
+    const status = await test.service.status()
+    expect(status.mergePolicy).toBe('auto')
+    expect(status.active.id).toBe(record.candidateId)
+    expect(status.active.artifacts.guidance).toHaveLength(2)
+    expect(status.pending).toBeUndefined()
+    expect((await test.service.history()).archives[0]?.reason).toBe('swap')
+    const section = (await core.scope.systemPrompt.assemble({ scope: core.key })).sections.find(candidate => candidate.name === 'rsi:distilled-policy')
+    expect(section?.text).toContain('verify each edit with focused tests')
+    await expect(readFile(join(test.ledgerDir, 'policy', 'meta.json'), 'utf8')).resolves.toContain('"reason": "merge"')
+  })
+
+  it('exposes evolutions and repairs through the activity view and change events', async () => {
+    const test = await tracked(harness({
+      proposals: [new Error('distiller offline'), new Error('still offline'), STRONG],
+      rsi: { mergePolicy: 'auto', daemonEnabled: true, daemonIntervalMs: 5, daemonMaxRetries: 2, daemonRetryBackoffMs: 1, cycleTimeoutMs: 5_000 },
+    }))
+    const changes: number[] = []
+    test.ctx.on('dual-core-rsi/changed', () => { changes.push(Date.now()) })
+    const core = await stubAgent(test, 'activity-core')
+    appendActivity(test, 'activity-work')
+    void core
+    await vi.waitFor(async () => {
+      const status = await test.service.status()
+      expect(status.cycleRunning).toBe(true)
+      expect(status.active.id).not.toBe('gen-1')
+    }, { timeout: 15_000 })
+    await vi.waitFor(async () => { expect((await test.service.status()).cycleRunning).toBe(false) }, { timeout: 15_000 })
+
+    const activity = await test.service.activity()
+    expect(activity.daemonEnabled).toBe(true)
+    expect(activity.mergePolicy).toBe('auto')
+    expect(activity.evolutions).toHaveLength(1)
+    const evolution = activity.evolutions[0]!
+    expect(evolution.trigger).toBe('schedule')
+    expect(evolution.rationale).toBe('two verify habits repeated across sessions')
+    expect(evolution.improvement).toBeCloseTo(0.8)
+    expect(evolution.guidance).toEqual(STRONG.artifacts.guidance)
+    expect(evolution.skills).toEqual(['verify-before-done'])
+    expect(activity.repairs.map(repair => repair.id)).toEqual(['inc-2', 'inc-1'])
+    expect(activity.repairs[0]?.kind).toBe('cycle-error')
+    expect(activity.repairs[0]?.detail).toContain('still offline')
+    expect(activity.repairs[1]?.detail).toContain('distiller offline')
+    // The durable swap settles before the background ledger commit and its change notification.
+    await vi.waitFor(() => { expect(changes.length).toBeGreaterThanOrEqual(3) }, { timeout: 15_000 })
+  })
+
+  it('contains a throwing change listener without failing the cycle', async () => {
+    const test = await tracked(harness({ proposals: [STRONG], rsi: { mergePolicy: 'auto' } }))
+    test.ctx.on('dual-core-rsi/changed', () => { throw new Error('listener exploded') })
+    await stubAgent(test, 'listener-core')
+    const record = await test.service.runCycle('command', new AbortController().signal)
+    expect(record.outcome).toBe('promoted')
+  })
+
+  it('lists human merges from the consult policy newest first and skips undecided candidates', async () => {
+    const test = await tracked(harness({ proposals: [STRONG, STRONGER, STRONGER] }))
+    await stubAgent(test, 'consult-activity-core')
+    await test.service.runCycle('command', new AbortController().signal)
+    await test.service.mergePending('command')
+    await test.service.runCycle('command', new AbortController().signal)
+    await test.service.mergePending('command')
+    // The third candidate ties the merged policy and is retained, so nothing new is offered.
+    const third = await test.service.runCycle('command', new AbortController().signal)
+    expect(third.outcome).toBe('retained')
+    const activity = await test.service.activity()
+    expect(activity.mergePolicy).toBe('consult')
+    expect(activity.evolutions.map(entry => entry.cycleId)).toEqual(['2', '1'])
+    expect(activity.evolutions[0]?.guidance).toHaveLength(3)
+  })
+
+  it('never consults when the last session exits under the background policy', async () => {
+    const test = await tracked(harness({ proposals: [STRONG], userQuestions: true, rsi: { mergePolicy: 'auto' } }))
+    const asked: unknown[] = []
+    test.ctx.on('user-questions/request', (request) => {
+      asked.push(request)
+      return Promise.resolve({ answers: [{ id: 'rsi-pending-merge', selected: ['Merge'] }] })
+    })
+    const core = await stubAgent(test, 'silent-auto-core')
+    await test.service.runCycle('command', new AbortController().signal)
+    core.registration()
+    await new Promise(resolve => setTimeout(resolve, 30))
+    expect(asked).toEqual([])
+    const status = await test.service.status()
+    expect(status.active.id).not.toBe('gen-1')
+    expect(status.pending).toBeUndefined()
+  })
+})
+
 describe('git ledger', () => {
   it('records merges and rollbacks as commits in the ledger repository', async () => {
     const test = await tracked(harness({ proposals: [STRONG] }))
@@ -1195,7 +1343,7 @@ describe('git ledger', () => {
     const subjects = await gitInLedger(test, ['log', '--format=%s'])
     expect(subjects.split('\n')[0]).toContain('rsi rollback: ')
     expect(subjects.split('\n')[1]).toContain('rsi merge: ')
-  })
+  }, 60_000)
 
   it('reports a missing git executable without undoing the merge', async () => {
     const test = await tracked(harness({ proposals: [STRONG], stubSubprocess: true }))

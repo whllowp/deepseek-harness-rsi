@@ -3,38 +3,38 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/experimental/dual-core-rsi/README.md
 /:
-  en: 698dcefd9ed8109a
-  zh: c377923f1ac6a83f
+  en: cd2589a7215ae117
+  zh: 68b48a1de0d08659
 /deepseek-ai-dsh-experimental-dual-core-rsi:
   en: b0445cc0ff118209
   zh: 5c6a1e3083820787
 /deepseek-ai-dsh-experimental-dual-core-rsi/summary:
-  en: e3869b3a16c8c718
-  zh: 703473b5821bc136
+  en: af2f8fa9f4b40da9
+  zh: 14c456140801da73
 /deepseek-ai-dsh-experimental-dual-core-rsi/table-of-contents:
   en: d152484eb41ac6b4
   zh: ffab54373e9e61f0
 /deepseek-ai-dsh-experimental-dual-core-rsi/use-this-package:
-  en: 844dd701911ec21e
-  zh: 8d666437105efbea
+  en: cb3ec4ea565a2bec
+  zh: db9f5fb91c528174
 /deepseek-ai-dsh-experimental-dual-core-rsi/use-this-package/the-daemon-runs-by-default:
   en: d777dec26dd5cc9e
   zh: bce7cb04d4310588
 /deepseek-ai-dsh-experimental-dual-core-rsi/use-this-package/what-a-cycle-does:
-  en: 0f4878d291f707b8
-  zh: 5681c2396671b5c2
-/deepseek-ai-dsh-experimental-dual-core-rsi/use-this-package/merging-at-session-exit:
-  en: e6f93d19406b986a
-  zh: 91f914de7df02eaa
+  en: 6e589ec5eb12ed50
+  zh: 4d3bf9c05709538f
+/deepseek-ai-dsh-experimental-dual-core-rsi/use-this-package/merging-at-session-exit-consult-policy:
+  en: a3116508c6fd6b34
+  zh: 1c94cfd9ec918958
 /deepseek-ai-dsh-experimental-dual-core-rsi/use-this-package/the-git-ledger:
-  en: be50ca101059a041
-  zh: ab1a27b2f978c860
+  en: 62b6beb7a695da84
+  zh: c20d7e89d91053ae
 /deepseek-ai-dsh-experimental-dual-core-rsi/use-this-package/knowing-when-the-policy-went-stale:
   en: 9bf2c58cb7225d4a
   zh: 524348eafd9ad1c3
 /deepseek-ai-dsh-experimental-dual-core-rsi/use-this-package/config:
-  en: 7ac37b50e78be78b
-  zh: 8df9597ce768e2c3
+  en: b8c9b49090dc8b94
+  zh: 04e2e487c0cad83e
 /deepseek-ai-dsh-experimental-dual-core-rsi/understand-the-implementation:
   en: b437f2045c03748a
   zh: 1deee4882d9958cc
@@ -96,8 +96,8 @@
   en: 755ae9163236296a
   zh: e440d65678dd97a9
 /deepseek-ai-dsh-experimental-dual-core-rsi/known-limitations-and-deferred-work:
-  en: c1c073454e504a19
-  zh: ba5654d6cdc98910
+  en: 89eb44ab2f726484
+  zh: 8b4b3af813087517
 /deepseek-ai-dsh-experimental-dual-core-rsi/known-limitations-and-deferred-work/dev-note:
   en: e5477688feb33039
   zh: d655780cace2f172

@@ -38,6 +38,7 @@
     }
   },
   "dependencies": {
+    "@deepseek-ai/dsh-experimental-client-ui-rsi": "workspace:*",
     "@deepseek-ai/dsh-experimental-dual-core-rsi": "workspace:*"
   },
   "peerDependencies": {

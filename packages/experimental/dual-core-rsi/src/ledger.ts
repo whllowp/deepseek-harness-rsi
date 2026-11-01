@@ -145,7 +145,7 @@ export class RsiLedger {
 
   /**
    * Write one generation's artifact set as ledger files.
-   * @param entry - the generation and its provenance.
+   * @param entry - the generation and its recording request.
    */
   private async materialize(entry: RsiLedgerEntry): Promise<void> {
     const policyDir = join(this.directory, 'policy')

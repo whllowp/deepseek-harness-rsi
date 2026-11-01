@@ -1,0 +1,30 @@
+# Equivalent to the dual-core RSI bundle over the stable base and Web bundles,
+# with a short daemon cadence and retry backoff so the keyless smoke observes
+# a scheduled self-repair and a background evolution within seconds.
+- insert:
+    - id: dual-core-rsi-distiller
+      name: '@deepseek-ai/dsh-experimental-dual-core-rsi/distiller-subagent'
+      config:
+        subagentProvider: spawn
+    - id: dual-core-rsi-benchmark
+      name: '@deepseek-ai/dsh-experimental-dual-core-rsi/benchmark-fixture'
+      config:
+        cases:
+          - name: verify-before-done
+            weight: 2
+            requiresGuidance:
+              - verify
+          - name: distilled-brevity
+            weight: 1
+            maxGuidanceChars: 4000
+    - id: dual-core-rsi
+      name: '@deepseek-ai/dsh-experimental-dual-core-rsi'
+      config:
+        threshold: 0.05
+        daemonIntervalMs: 500
+        daemonRetryBackoffMs: 200
+        daemonMaxRetries: 2
+    - id: ui-rsi
+      name: '@deepseek-ai/dsh-experimental-client-ui-rsi'
+      config:
+        refreshIntervalMs: 1000

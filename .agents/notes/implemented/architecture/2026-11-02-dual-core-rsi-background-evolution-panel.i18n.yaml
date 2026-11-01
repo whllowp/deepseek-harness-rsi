@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-11-02-dual-core-rsi-background-evolution-panel.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-02-dual-core-rsi-background-evolution-panel.md
+/agent-note-background-self-evolution-by-default-with-a-sidebar-activity-panel:
+  en: 263dc75fad035217
+  zh: 95b61672791cbbef
+/agent-note-background-self-evolution-by-default-with-a-sidebar-activity-panel/problem:
+  en: 0dc8109979fb4b93
+  zh: 968c3df0ea8088f8
+/agent-note-background-self-evolution-by-default-with-a-sidebar-activity-panel/decision:
+  en: 67f1621997b593e2
+  zh: 8b9ea21abb988682
+/agent-note-background-self-evolution-by-default-with-a-sidebar-activity-panel/consequences:
+  en: 289ec067e588fea7
+  zh: 929bbcf85c8a06d4
+/agent-note-background-self-evolution-by-default-with-a-sidebar-activity-panel/alternatives-considered:
+  en: deab6754c9bb82b4
+  zh: 4048d29d8000698b

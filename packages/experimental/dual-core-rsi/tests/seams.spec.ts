@@ -530,6 +530,7 @@ describe('rendering', () => {
       daemon: base({ id: RsiGenerationId('gen-d') }),
       threshold: 0.05,
       daemonEnabled: true,
+      mergePolicy: 'consult',
       cycleRunning: true,
       lastCycle,
       archiveCount: 2,
@@ -555,7 +556,7 @@ describe('rendering', () => {
 
     const cycle = renderCycleRecord(lastCycle)
     expect(cycle).toContain('cycle 1 (command) adopted a new working policy')
-    expect(cycle).toContain('records predate merge decisions')
+    expect(cycle).toContain('adopted a new working policy in the background')
     const retained = renderCycleRecord({ ...lastCycle, outcome: 'retained' })
     expect(retained).toContain('kept the current policy')
     const waiting = renderCycleRecord({ ...lastCycle, outcome: 'pending' })
@@ -641,6 +642,7 @@ describe('rendering', () => {
       daemon: base({ id: RsiGenerationId('gen-d') }),
       threshold: 0.05,
       daemonEnabled: true,
+      mergePolicy: 'consult',
       cycleRunning: false,
       lastCycle: cycle,
       pending,
@@ -739,6 +741,7 @@ describe('rendering', () => {
       daemon: base({ id: RsiGenerationId('gen-d') }),
       threshold: 0.05,
       daemonEnabled: true,
+      mergePolicy: 'consult',
       cycleRunning: false,
       archiveCount: 0,
       incidents: [],

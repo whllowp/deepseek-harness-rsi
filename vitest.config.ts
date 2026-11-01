@@ -337,6 +337,9 @@ export default defineConfig({
         // The access entry imports its generated Remote contribution, which exists only in lib;
         // the Web snapshot exercises the built entry, while source tests cover mountAccess.
         'packages/api/remote-access/src/client/index.ts',
+        // The self-evolution entry imports the generated dual-core RSI Remote contribution, which
+        // exists only in lib; source tests cover mountRsiPanel and load the entry with that Remote mocked.
+        'packages/experimental/client-ui-rsi/src/client/index.ts',
         // Slash/command/input round: per-file gaps deferred with the same
         // client-lane debt. TODO(gui): cover and remove with the lane above.
         'packages/client/ui-commands/src/index.ts',

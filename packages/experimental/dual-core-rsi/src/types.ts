@@ -78,14 +78,22 @@ export interface RsiGeneration {
 export type RsiCycleTrigger = 'command' | 'tool' | 'schedule'
 
 /**
+ * How a gate-passing candidate is adopted. `auto` merges it in the background
+ * without any human input; `consult` parks it as pending and asks the human
+ * when the session exits.
+ */
+export type RsiMergePolicy = 'auto' | 'consult'
+
+/**
  * Terminal outcome of one daemon distillation cycle. `pending` marks a
  * candidate that beat the benchmark gate and waits for a human merge
- * decision; `promoted` survives only on records written before merge
- * decisions existed, when passing the gate swapped the cores immediately.
+ * decision; `promoted` marks one the daemon adopted itself (the default
+ * `auto` policy, and the only outcome of records written before merge
+ * decisions existed).
  */
 export type RsiCycleOutcome = 'promoted' | 'retained' | 'pending'
 
-/** How a human settled one pending merge candidate. */
+/** How a human settled one pending candidate. */
 export type RsiMergeDecision = 'merged' | 'declined'
 
 /** Durable record of one completed daemon distillation cycle. */
@@ -223,6 +231,41 @@ export interface RsiPendingCandidate {
   readonly cycle: RsiCycleRecord
 }
 
+/**
+ * One background evolution shown to the user: a policy the daemon adopted
+ * (automatically under `auto`, or through a human merge under `consult`).
+ */
+export interface RsiEvolutionEntry {
+  readonly cycleId: RsiCycleId
+  /** Generation that became the active policy. */
+  readonly generationId: RsiGenerationId
+  readonly trigger: RsiCycleTrigger
+  /** Safe-integer epoch milliseconds of adoption. */
+  readonly adoptedAt: number
+  readonly baselineScore: number
+  readonly candidateScore: number
+  readonly improvement: number
+  readonly rationale: string
+  /** Adopted guidance lines, in order. */
+  readonly guidance: readonly string[]
+  /** Names of the adopted skill documents. */
+  readonly skills: readonly string[]
+}
+
+/**
+ * Read-side activity view for client surfaces (the sidebar panel): the
+ * daemon's recent evolutions and self-repairs, bounded, newest first.
+ */
+export interface RsiActivityView {
+  /** Whether the scheduled daemon driver is armed. */
+  readonly daemonEnabled: boolean
+  readonly mergePolicy: RsiMergePolicy
+  /** Newest evolutions first (bounded). */
+  readonly evolutions: readonly RsiEvolutionEntry[]
+  /** Newest recorded self-repairs first (bounded). */
+  readonly repairs: readonly RsiIncidentRecord[]
+}
+
 /** Read-side projection of the whole dual-core state for tools and command. */
 export interface RsiStatusView {
   /** Current user-core generation. */
@@ -233,6 +276,8 @@ export interface RsiStatusView {
   readonly threshold: number
   /** Whether the scheduled daemon driver is armed. */
   readonly daemonEnabled: boolean
+  /** Adoption policy in effect for gate-passing candidates. */
+  readonly mergePolicy: RsiMergePolicy
   /** Most recent completed cycle, when one exists. */
   readonly lastCycle?: RsiCycleRecord | undefined
   /** Pending merge candidate awaiting a human decision, when one exists. */
@@ -247,4 +292,16 @@ export interface RsiStatusView {
   readonly knowledgeCutoffAt?: number | undefined
   /** Live sessions with activity newer than the knowledge cutoff. */
   readonly unseenSessionCount: number
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * Durable dual-core RSI activity changed: a cycle settled, a candidate was
+     * adopted or declined, an incident landed, or a rollback ran; clients
+     * refetch the activity view.
+     * @mode emit
+     */
+    'dual-core-rsi/changed'(): void
+  }
 }

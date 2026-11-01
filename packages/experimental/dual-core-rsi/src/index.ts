@@ -9,9 +9,10 @@
  * @module @deepseek-ai/dsh-experimental-dual-core-rsi
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { isAbsolute } from 'node:path'
+import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-jobs'
 import type {} from '@deepseek-ai/dsh-user-questions'
@@ -34,17 +35,19 @@ import {
   renderMergeResult, renderRollback, renderStatus,
 } from './render.ts'
 import type {
-  RsiArchiveEntry, RsiArtifactBudgets, RsiCycleRecord, RsiCycleTrigger, RsiGeneration,
-  RsiIncidentRecord, RsiMergeDecision, RsiPendingCandidate, RsiStatusView,
+  RsiActivityView, RsiArchiveEntry, RsiArtifactBudgets, RsiCycleRecord, RsiCycleTrigger,
+  RsiEvolutionEntry, RsiGeneration, RsiIncidentRecord, RsiMergeDecision, RsiMergePolicy,
+  RsiPendingCandidate, RsiStatusView,
 } from './types.ts'
 
 export type {
-  RsiArchiveEntry, RsiArtifactBudgets, RsiArtifacts, RsiBenchmarkCaseResult,
-  RsiBenchmarkReport, RsiBenchmarkRequest, RsiCycleOutcome, RsiCycleRecord,
-  RsiCycleTrigger, RsiDistillInput, RsiDistillOutput, RsiGeneration,
-  RsiGenerationOrigin, RsiIncidentKind, RsiIncidentRecord,
-  RsiIncidentRecovery, RsiMergeDecision, RsiPendingCandidate, RsiSessionDigest,
-  RsiSessionDigestEntry, RsiSkillArtifact, RsiStatusView,
+  RsiActivityView, RsiArchiveEntry, RsiArtifactBudgets, RsiArtifacts,
+  RsiBenchmarkCaseResult, RsiBenchmarkReport, RsiBenchmarkRequest, RsiCycleOutcome,
+  RsiCycleRecord, RsiCycleTrigger, RsiDistillInput, RsiDistillOutput,
+  RsiEvolutionEntry, RsiGeneration, RsiGenerationOrigin, RsiIncidentKind,
+  RsiIncidentRecord, RsiIncidentRecovery, RsiMergeDecision, RsiMergePolicy,
+  RsiPendingCandidate, RsiSessionDigest, RsiSessionDigestEntry, RsiSkillArtifact,
+  RsiStatusView,
 } from './types.ts'
 export { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId } from './branding.ts'
 export { decodeArtifacts, renderPolicySection, applyArtifacts, formatPercent } from './policy.ts'
@@ -114,6 +117,8 @@ export interface Config {
   digestIncludeStoredSessions?: boolean
   /** Whether the scheduled daemon driver runs cycles without a manual command (default true). */
   daemonEnabled?: boolean
+  /** How a gate-passing candidate is adopted: merged in the background (default `auto`) or parked for a human decision (`consult`). */
+  mergePolicy?: RsiMergePolicy
   /** Milliseconds between scheduled daemon ticks (default 600000). */
   daemonIntervalMs?: number
   /** Failed-attempt retries per scheduled daemon round beyond the first attempt (default 2, maximum 10). */
@@ -136,6 +141,9 @@ export const DEFAULT_RUN_WAIT_MS = 120_000
 
 /** Default scheduled daemon tick interval. */
 export const DEFAULT_DAEMON_INTERVAL_MS = 600_000
+
+/** Default adoption policy for a gate-passing candidate. */
+export const DEFAULT_MERGE_POLICY: RsiMergePolicy = 'auto'
 
 /** Default failed-attempt retries per scheduled round beyond the first attempt. */
 export const DEFAULT_DAEMON_RETRIES = 2
@@ -166,6 +174,7 @@ export const Config: z<Config> = z.object({
   runWaitMs: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_RUN_WAIT_MS),
   digestIncludeStoredSessions: z.boolean().default(true),
   daemonEnabled: z.boolean().default(true),
+  mergePolicy: z.union(['auto', 'consult']).default(DEFAULT_MERGE_POLICY),
   daemonIntervalMs: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_DAEMON_INTERVAL_MS),
   daemonMaxRetries: z.number().step(1).min(0).max(10).default(DEFAULT_DAEMON_RETRIES),
   daemonRetryBackoffMs: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_DAEMON_RETRY_BACKOFF_MS),
@@ -182,6 +191,7 @@ export interface ResolvedConfig extends RsiArtifactBudgets {
   readonly runWaitMs: number
   readonly digestIncludeStoredSessions: boolean
   readonly daemonEnabled: boolean
+  readonly mergePolicy: RsiMergePolicy
   readonly daemonIntervalMs: number
   readonly daemonMaxRetries: number
   readonly daemonRetryBackoffMs: number
@@ -238,6 +248,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     runWaitMs: positiveSafeInteger(config.runWaitMs, DEFAULT_RUN_WAIT_MS, 'runWaitMs'),
     digestIncludeStoredSessions: config.digestIncludeStoredSessions ?? true,
     daemonEnabled: config.daemonEnabled ?? true,
+    mergePolicy: config.mergePolicy ?? DEFAULT_MERGE_POLICY,
     daemonIntervalMs: positiveSafeInteger(config.daemonIntervalMs, DEFAULT_DAEMON_INTERVAL_MS, 'daemonIntervalMs'),
     daemonMaxRetries: boundedRetries(config.daemonMaxRetries, DEFAULT_DAEMON_RETRIES, 'daemonMaxRetries'),
     daemonRetryBackoffMs: positiveSafeInteger(config.daemonRetryBackoffMs, DEFAULT_DAEMON_RETRY_BACKOFF_MS, 'daemonRetryBackoffMs'),
@@ -249,8 +260,8 @@ export function resolveConfig(config: Config): ResolvedConfig {
 
 const USAGE = 'Usage: /rsi [status|run|merge|decline|summary|history|rollback [<archive id>]]'
 
-/** Where a human merge or decline decision came from. */
-export type RsiDecisionSource = 'command' | 'consult'
+/** Where a merge or decline decision came from: a human surface or the background policy. */
+export type RsiDecisionSource = 'command' | 'consult' | 'auto'
 
 /** Everything one settled merge decision produced. */
 export interface RsiMergeResult {
@@ -295,7 +306,7 @@ type ScheduledRoundOutcome =
  * interrupted operation leaves the previous pointer with at most orphan
  * records.
  */
-export class DualCoreRsiService extends Service {
+export class DualCoreRsiService extends TypertRemoteService {
   static inject = ['agents', 'sessions', 'sessionProjections', 'systemPrompt', 'storageDomain', 'rsiDistiller', 'rsiBenchmark', 'tools', 'commands', 'jobs', 'subprocess']
 
   static Config: z<Config> = Config
@@ -308,6 +319,7 @@ export class DualCoreRsiService extends Service {
   private readonly applied = new Map<SessionId, AppliedEntry>()
   private cycleRunning = false
   private daemonTimer: ReturnType<typeof setTimeout> | undefined
+  private roundController: AbortController | undefined
   private daemonDisposed = false
   private consultRunning = false
 
@@ -333,7 +345,8 @@ export class DualCoreRsiService extends Service {
         clearTimeout(this.daemonTimer)
         this.daemonTimer = undefined
       }
-    }, 'dualCoreRsi: daemon timer')
+      this.roundController?.abort(new Error('the dual-core RSI service was disposed'))
+    }, 'dualCoreRsi: daemon timer and round')
     ctx.on('agent/created', async ({ agent }) => {
       await this.readyPromise
       this.attachNow(agent)
@@ -547,25 +560,34 @@ export class DualCoreRsiService extends Service {
       const baselineScore = this.requiredScore(active)
       const candidateScore = this.requiredScore(candidate)
       const improvement = candidateScore - baselineScore
+      const cycleId = RsiCycleId(String(this.state.cycleCounter + 1))
       let outcome: RsiCycleRecord['outcome'] = 'retained'
+      let adopted = false
       if (improvement > this.resolved.threshold) {
-        const currentPending = this.state.pendingCandidateId === undefined
-          ? undefined
-          : this.requireGeneration(this.state.pendingCandidateId, 'pending')
-        const pendingScore = currentPending?.benchmark?.score ?? 0
-        if (currentPending === undefined || candidateScore >= pendingScore) {
-          this.state = { ...this.state, pendingCandidateId: candidate.id }
-          outcome = 'pending'
+        if (this.resolved.mergePolicy === 'auto') {
+          // Background evolution: the daemon adopts the candidate itself, with no human input.
+          await this.adoptCore(candidate)
+          outcome = 'promoted'
+          adopted = true
+        } else {
+          const currentPending = this.state.pendingCandidateId === undefined
+            ? undefined
+            : this.requireGeneration(this.state.pendingCandidateId, 'pending')
+          const pendingScore = currentPending?.benchmark?.score ?? 0
+          if (currentPending === undefined || candidateScore >= pendingScore) {
+            this.state = { ...this.state, pendingCandidateId: candidate.id }
+            outcome = 'pending'
+          }
         }
       }
-      if (daemon.benchmark === undefined || candidateScore >= daemon.benchmark.score) {
+      if (!adopted && (daemon.benchmark === undefined || candidateScore >= daemon.benchmark.score)) {
         this.state = { ...this.state, daemonId: candidate.id }
       }
-      // Every settled cycle, pending or retained, digests all live sessions
-      // up to this point: this is the knowledge cutoff.
+      // Every settled cycle, adopted, pending, or retained, digests all live
+      // sessions up to this point: this is the knowledge cutoff.
       this.state = { ...this.state, knowledgeCutoffAt: Date.now() }
       const record: RsiCycleRecord = {
-        id: RsiCycleId(String(this.state.cycleCounter + 1)),
+        id: cycleId,
         trigger,
         startedAt,
         settledAt: Date.now(),
@@ -576,10 +598,21 @@ export class DualCoreRsiService extends Service {
         threshold: this.resolved.threshold,
         candidateId: candidate.id,
         rationale: output.rationale,
+        ...adopted ? { decision: 'merged' as const, decidedAt: Date.now() } : {},
       }
       this.state = { ...this.state, cycleCounter: this.state.cycleCounter + 1 }
       await this.domain.table('cycles').put(record.id, record)
       await this.commitState()
+      if (adopted) {
+        await this.ledger.record({
+          reason: 'merge',
+          generation: candidate,
+          cycleId,
+          score: candidateScore,
+          summary: output.rationale,
+        }, new AbortController().signal)
+      }
+      this.notifyChanged()
       return record
     } finally {
       this.cycleRunning = false
@@ -614,6 +647,38 @@ export class DualCoreRsiService extends Service {
     return entry
   }
 
+  /**
+   * Apply one adoption's durable core: archive the replaced policy, flip the
+   * active pointer, clear any parked candidate, keep the better daemon
+   * lineage, and re-apply artifacts to live agents. The caller owns the
+   * cycle-record stamp, the state commit, and the git ledger.
+   * @param candidate - the generation becoming the active policy.
+   * @returns the archive entry created for the replaced policy.
+   */
+  private async adoptCore(candidate: RsiGeneration): Promise<RsiArchiveEntry> {
+    const archived = await this.archive(this.activeGeneration(), candidate.id, 'swap')
+    this.state = this.state.pendingCandidateId === undefined
+      ? { ...this.state, activeId: candidate.id, lastDecisionAt: Date.now() }
+      : { ...this.state, activeId: candidate.id, pendingCandidateId: undefined, lastDecisionAt: Date.now() }
+    const daemon = this.daemonGeneration()
+    const score = this.requiredScore(candidate)
+    if (daemon.benchmark === undefined || score >= daemon.benchmark.score) {
+      await this.seedDaemonFrom(candidate)
+    }
+    this.reapplyActive()
+    return archived
+  }
+
+  /** Dispatch one post-commit change notification for client surfaces, containing synchronous listener failures. */
+  private notifyChanged(): void {
+    try {
+      this.ctx.emit('dual-core-rsi/changed')
+    } catch (error) {
+      /* v8 ignore next -- the String arm needs a non-Error throw, which listeners in this repository never raise */
+      this.ctx.logger.warn(`dual-core RSI: change listener failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
   /** Stamp the pending candidate's cycle record with the human decision. */
   private async decideCycle(cycle: RsiCycleRecord, decision: RsiMergeDecision): Promise<void> {
     await this.domain.table('cycles').put(cycle.id, { ...cycle, decision, decidedAt: Date.now() })
@@ -633,14 +698,8 @@ export class DualCoreRsiService extends Service {
     if (pending === undefined) {
       throw new RsiError('no-pending-candidate', 'no dual-core RSI candidate is waiting for a merge decision; run a cycle first')
     }
-    const archived = await this.archive(this.activeGeneration(), pending.generation.id, 'swap')
-    this.state = { ...this.state, activeId: pending.generation.id, pendingCandidateId: undefined, lastDecisionAt: Date.now() }
-    const daemon = this.daemonGeneration()
     const pendingScore = this.requiredScore(pending.generation)
-    if (daemon.benchmark === undefined || pendingScore >= daemon.benchmark.score) {
-      await this.seedDaemonFrom(pending.generation)
-    }
-    this.reapplyActive()
+    const archived = await this.adoptCore(pending.generation)
     await this.decideCycle(pending.cycle, 'merged')
     await this.commitState()
     const ledger = await this.ledger.record({
@@ -650,6 +709,7 @@ export class DualCoreRsiService extends Service {
       score: pendingScore,
       summary: pending.cycle.rationale,
     }, new AbortController().signal)
+    this.notifyChanged()
     return { generation: pending.generation, cycle: pending.cycle, archived, ledger, source }
   }
 
@@ -669,6 +729,7 @@ export class DualCoreRsiService extends Service {
     this.state = { ...this.state, pendingCandidateId: undefined, lastDecisionAt: Date.now() }
     await this.decideCycle(pending.cycle, 'declined')
     await this.commitState()
+    this.notifyChanged()
     return { cycle: pending.cycle, source }
   }
 
@@ -711,6 +772,7 @@ export class DualCoreRsiService extends Service {
       score: restored.benchmark?.score,
       summary: `restored by /rsi rollback${pending === undefined ? '' : `; declined pending ${pending.generation.id}`}`,
     }, new AbortController().signal)
+    this.notifyChanged()
     return { restored, archived, ledger }
   }
 
@@ -731,6 +793,7 @@ export class DualCoreRsiService extends Service {
       daemon: this.daemonGeneration(),
       threshold: this.resolved.threshold,
       daemonEnabled: this.resolved.daemonEnabled,
+      mergePolicy: this.resolved.mergePolicy,
       ...newest === undefined ? {} : { lastCycle: this.domain.table('cycles').get(RsiCycleId(newest)) },
       ...pending === undefined ? {} : { pending },
       cycleRunning: this.cycleRunning,
@@ -765,6 +828,46 @@ export class DualCoreRsiService extends Service {
     return { cycles, archives, incidents }
   }
 
+  /**
+   * Read the daemon's recent background evolutions and self-repairs for
+   * client surfaces (the sidebar panel), bounded and newest first.
+   * @returns the activity view.
+   */
+  @Remote('activity')
+  async activity(): Promise<RsiActivityView> {
+    await this.waitReady()
+    const evolutions = [...this.domain.table('cycles').entries()]
+      .map(([, record]) => record)
+      .filter(record => record.outcome === 'promoted' || (record.outcome === 'pending' && record.decision === 'merged'))
+      .sort((a, b) => (b.decidedAt ?? b.settledAt) - (a.decidedAt ?? a.settledAt))
+      .slice(0, 20)
+      .map((record): RsiEvolutionEntry => {
+        const generation = this.requireGeneration(record.candidateId, 'evolution')
+        return {
+          cycleId: record.id,
+          generationId: generation.id,
+          trigger: record.trigger,
+          adoptedAt: record.decidedAt ?? record.settledAt,
+          baselineScore: record.baselineScore,
+          candidateScore: record.candidateScore,
+          improvement: record.improvement,
+          rationale: record.rationale,
+          guidance: generation.artifacts.guidance,
+          skills: generation.artifacts.skills.map(skill => skill.name),
+        }
+      })
+    const repairs = [...this.domain.table('incidents').entries()]
+      .map(([, record]) => record)
+      .sort((a, b) => suffixRank(b.id) - suffixRank(a.id))
+      .slice(0, 20)
+    return {
+      daemonEnabled: this.resolved.daemonEnabled,
+      mergePolicy: this.resolved.mergePolicy,
+      evolutions,
+      repairs,
+    }
+  }
+
   /** Arm the scheduled daemon tick; opportunistic daemon work never keeps a host alive. */
   private armDaemon(): void {
     if (this.daemonDisposed || !this.resolved.daemonEnabled) return
@@ -797,37 +900,31 @@ export class DualCoreRsiService extends Service {
   }
 
   /**
-   * Start one scheduled daemon round as a background job: each attempt is
+   * Start one scheduled daemon round as service-owned background work, not a
+   * registry job: the round never talks to the human or the model, so it owns
+   * no agent's job controller and posts no completion notice. Each attempt is
    * timeboxed by `cycleTimeoutMs`, failures record self-repair incidents and
    * retry with backoff up to `daemonMaxRetries`, and the round defers to the
-   * next interval tick once the retry budget is spent.
-   * @returns the registry-issued job id.
+   * next interval tick once the retry budget is spent. Service disposal
+   * cancels the round in flight.
    */
-  private startScheduledRound(): JobId {
+  private startScheduledRound(): void {
     const controller = new AbortController()
-    return this.ctx.jobs.start({
-      kind: 'dual-core-rsi',
-      label: 'RSI daemon scheduled cycle',
-      run: (job: JobHandle) => {
-        job.append('daemon core: scheduled tick with unseen session activity; distilling a candidate policy\n', { channel: 'log' })
-        const done = this.scheduledRound(job, controller.signal)
-          .then((outcome): { status: 'completed' | 'failed' | 'killed'; detail?: string; result?: string } => {
-            if (outcome.status === 'completed') {
-              job.append(`daemon core: ${renderCycleRecord(outcome.record)}\n`, { channel: 'log' })
-              return { status: 'completed' as const, result: renderCycleRecord(outcome.record) }
-            }
-            return { status: outcome.status, detail: outcome.detail }
-          })
-          .finally(() => {
-            this.armDaemon()
-            this.maybeConsultOnExit()
-          })
-        return {
-          cancel: (reason?: string) => { controller.abort(new Error(reason ?? 'daemon round cancelled')) },
-          done,
+    this.roundController = controller
+    this.ctx.logger.info('dual-core RSI: scheduled tick found unseen session activity; distilling a candidate policy')
+    void this.scheduledRound(controller.signal)
+      .then((outcome) => {
+        if (outcome.status === 'completed') {
+          this.ctx.logger.info(`dual-core RSI: ${renderCycleRecord(outcome.record)}`)
+        } else {
+          this.ctx.logger.info(`dual-core RSI: scheduled round ${outcome.status}: ${outcome.detail}`)
         }
-      },
-    })
+      })
+      .finally(() => {
+        this.roundController = undefined
+        this.armDaemon()
+        this.maybeConsultOnExit()
+      })
   }
 
   /**
@@ -835,7 +932,7 @@ export class DualCoreRsiService extends Service {
    * and backoff retries until one attempt settles, the round is cancelled,
    * or the retry budget is spent.
    */
-  private async scheduledRound(job: JobHandle, signal: AbortSignal): Promise<ScheduledRoundOutcome> {
+  private async scheduledRound(signal: AbortSignal): Promise<ScheduledRoundOutcome> {
     const maxAttempts = 1 + this.resolved.daemonMaxRetries
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       /* v8 ignore next -- hitting it needs the kill to land between two attempts rather than inside one or its backoff */
@@ -847,7 +944,7 @@ export class DualCoreRsiService extends Service {
       const startedAt = Date.now()
       try {
         const record = await this.runCycle('schedule', AbortSignal.any([signal, timeout.signal]))
-        if (attempt > 1) job.append(`daemon core: attempt ${attempt} recovered the round\n`, { channel: 'log' })
+        if (attempt > 1) this.ctx.logger.info(`dual-core RSI: attempt ${attempt} recovered the scheduled round`)
         return { status: 'completed', record }
       } catch (error) {
         /* v8 ignore next -- the String arm needs a non-Error rejection, which the cycle never produces */
@@ -869,7 +966,7 @@ export class DualCoreRsiService extends Service {
           recovery: retried ? 'retried' : 'deferred',
           retryAfterMs,
         })
-        job.append(`daemon core: attempt ${attempt} failed (${timeout.signal.aborted ? 'timed out' : 'error'}): ${detail}; ${retried ? `retrying in ${retryAfterMs}ms` : `deferring to the next interval in ${retryAfterMs}ms`}\n`, { channel: 'log' })
+        this.ctx.logger.info(`dual-core RSI: attempt ${attempt} failed (${timeout.signal.aborted ? 'timed out' : 'error'}): ${detail}; ${retried ? `retrying in ${retryAfterMs}ms` : `deferring to the next interval in ${retryAfterMs}ms`}`)
         if (!retried) return { status: 'failed', detail }
         const slept = await sleep(this.resolved.daemonRetryBackoffMs, signal)
         if (!slept) return { status: 'killed', detail: 'the daemon round was cancelled during its retry backoff' }
@@ -888,12 +985,13 @@ export class DualCoreRsiService extends Service {
     this.state = { ...this.state, incidentCounter: counter + 1 }
     await this.domain.table('incidents').put(record.id, record)
     await this.commitState()
+    this.notifyChanged()
     return record
   }
 
-  /** Consult the human about the pending candidate once the last live session exits. */
+  /** Consult the human about the pending candidate once the last live session exits; never under the background policy. */
   private maybeConsultOnExit(): void {
-    if (this.daemonDisposed || this.consultRunning || this.cycleRunning) return
+    if (this.daemonDisposed || this.resolved.mergePolicy !== 'consult' || this.consultRunning || this.cycleRunning) return
     if (this.ctx.agents.list().length > 0) return
     void this.consultOnExit()
   }
@@ -969,16 +1067,21 @@ export class DualCoreRsiService extends Service {
   }
 
   /**
-   * Start one daemon cycle as a background job the daemon core owns; the
-   * job streams cycle narration and never blocks the caller's step.
+   * Start one human-requested daemon cycle as a background job; the job
+   * streams cycle narration and never blocks the caller's step. An owning
+   * session places the job under that agent's job controller, which the Web
+   * composition mounts per agent; without one the job is unowned and needs a
+   * context-global controller.
    * @param trigger - what started the cycle.
+   * @param owner - session whose live agent owns the job, when one requested it.
    * @returns the registry-issued job id.
    */
-  startDaemonJob(trigger: RsiCycleTrigger): JobId {
+  startDaemonJob(trigger: RsiCycleTrigger, owner?: SessionId): JobId {
     const controller = new AbortController()
     return this.ctx.jobs.start({
       kind: 'dual-core-rsi',
       label: 'RSI daemon distillation cycle',
+      ...owner === undefined ? {} : { owner },
       run: (job: JobHandle) => {
         job.append('daemon core: assembling session digest and distilling a candidate policy\n', { channel: 'log' })
         const done = this.runCycle(trigger, controller.signal)
@@ -1008,10 +1111,10 @@ export class DualCoreRsiService extends Service {
    * executor; the cycle is unaffected either way.
    * @returns the settled command result.
    */
-  private async runCommandCycle(): Promise<CommandResult> {
-    const jobId = this.startDaemonJob('command')
+  private async runCommandCycle(agent: Agent): Promise<CommandResult> {
+    const jobId = this.startDaemonJob('command', agent.id)
     /* v8 ignore next -- only service teardown rejects a live wait, and the cycle is cancelled then anyway */
-    const job = await this.ctx.jobs.wait(jobId, this.resolved.runWaitMs)
+    const job = await this.ctx.jobs.wait(jobId, this.resolved.runWaitMs, agent.id)
       .catch(() => undefined)
     if (job === undefined || job.status === 'running' || job.status === 'stopping') {
       return {
@@ -1057,7 +1160,7 @@ export class DualCoreRsiService extends Service {
         schema: { type: 'object', additionalProperties: false, properties: { jobId: { type: 'string', required: true } } },
         render: (_args, value) => [{ type: 'text', text: `RSI daemon cycle job ${value.jobId} started.` }],
       },
-      execute: () => Promise.resolve({ jobId: this.startDaemonJob('tool') }),
+      execute: () => Promise.resolve({ jobId: this.startDaemonJob('tool', this.ctx.agents.currentInitiator()?.id) }),
       presentCall: () => ({ card: 'generic', title: 'rsi_run', rawInput: '' }),
       presentResult: () => ({ card: 'generic' }),
     }))
@@ -1116,7 +1219,7 @@ export class DualCoreRsiService extends Service {
       return { kind: 'success', text: renderStatus(await this.status()) }
     }
     if (control === 'run') {
-      return this.runCommandCycle()
+      return this.runCommandCycle(invocation.agent)
     }
     if (control === 'merge') {
       try {

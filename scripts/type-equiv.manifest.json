@@ -468,6 +468,11 @@
       "source": "packages/experimental/dual-core-rsi/src/types.ts"
     },
     {
+      "doc": "docs/subsystems/dual-core-rsi.md",
+      "symbol": "RsiEvolutionEntry",
+      "source": "packages/experimental/dual-core-rsi/src/types.ts"
+    },
+    {
       "doc": "docs/subsystems/agent-team.md",
       "symbol": "TeamTaskView",
       "source": "packages/experimental/agent-team/src/types.ts"

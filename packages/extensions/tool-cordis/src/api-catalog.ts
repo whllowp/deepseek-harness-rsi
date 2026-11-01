@@ -1103,9 +1103,15 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'bounded history.',
       },
       {
-        signature: 'startDaemonJob(trigger: RsiCycleTrigger): JobId',
-        description: 'Start one daemon cycle as a background job the daemon core owns; the job streams cycle narration and never blocks the caller\'s step.',
-        parameters: [{ name: 'trigger', description: 'what started the cycle.' }],
+        signature: '@Remote(\'activity\') async activity(): Promise<RsiActivityView>',
+        description: 'Read the daemon\'s recent background evolutions and self-repairs for client surfaces (the sidebar panel), bounded and newest first.',
+        parameters: [],
+        returns: 'the activity view.',
+      },
+      {
+        signature: 'startDaemonJob(trigger: RsiCycleTrigger, owner?: SessionId): JobId',
+        description: 'Start one human-requested daemon cycle as a background job; the job streams cycle narration and never blocks the caller\'s step. An owning session places the job under that agent\'s job controller, which the Web composition mounts per agent; without one the job is unowned and needs a context-global controller.',
+        parameters: [{ name: 'trigger', description: 'what started the cycle.' }, { name: 'owner', description: 'session whose live agent owns the job, when one requested it.' }],
         returns: 'the registry-issued job id.',
       },
     ],
@@ -4378,6 +4384,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'change', description: 'domain, table (`\'\'` for global), key (`\'\'` for global), operation discriminant, and on `put` the new snapshot.' }],
   },
   {
+    name: 'dual-core-rsi/changed',
+    mode: 'emit',
+    signature: '\'dual-core-rsi/changed\'(): void',
+    summary: 'Durable dual-core RSI activity changed: a cycle settled, a candidate was adopted or declined, an incident landed, or a rollback ran; clients refetch the activity view.',
+    description: 'Durable dual-core RSI activity changed: a cycle settled, a candidate was adopted or declined, an incident landed, or a rollback ran; clients refetch the activity view.',
+    parameters: [],
+  },
+  {
     name: 'feedback/committed',
     mode: 'parallel',
     signature: '\'feedback/committed\'(inspection: SessionInspection): void',
@@ -6914,6 +6928,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type RpcId = Branded<\'rpc-id\'>;',
   },
   {
+    name: 'RsiActivityView',
+    declaration: 'export interface RsiActivityView {\n    readonly daemonEnabled: boolean;\n    readonly mergePolicy: RsiMergePolicy;\n    readonly evolutions: readonly RsiEvolutionEntry[];\n    readonly repairs: readonly RsiIncidentRecord[];\n}',
+  },
+  {
     name: 'RsiArchiveEntry',
     declaration: 'export interface RsiArchiveEntry {\n    readonly id: RsiArchiveId;\n    readonly archivedAt: number;\n    readonly generation: RsiGeneration;\n    readonly supersededBy: RsiGenerationId;\n    readonly reason: \'swap\' | \'rollback\';\n}',
   },
@@ -6959,7 +6977,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RsiDecisionSource',
-    declaration: 'export type RsiDecisionSource = \'command\' | \'consult\';',
+    declaration: 'export type RsiDecisionSource = \'command\' | \'consult\' | \'auto\';',
   },
   {
     name: 'RsiDeclineResult',
@@ -6976,6 +6994,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RsiDistillOutput',
     declaration: 'export interface RsiDistillOutput {\n    readonly rationale: string;\n    readonly artifacts: RsiArtifacts;\n}',
+  },
+  {
+    name: 'RsiEvolutionEntry',
+    declaration: 'export interface RsiEvolutionEntry {\n    readonly cycleId: RsiCycleId;\n    readonly generationId: RsiGenerationId;\n    readonly trigger: RsiCycleTrigger;\n    readonly adoptedAt: number;\n    readonly baselineScore: number;\n    readonly candidateScore: number;\n    readonly improvement: number;\n    readonly rationale: string;\n    readonly guidance: readonly string[];\n    readonly skills: readonly string[];\n}',
   },
   {
     name: 'RsiGeneration',
@@ -7014,6 +7036,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type RsiMergeDecision = \'merged\' | \'declined\';',
   },
   {
+    name: 'RsiMergePolicy',
+    declaration: 'export type RsiMergePolicy = \'auto\' | \'consult\';',
+  },
+  {
     name: 'RsiMergeResult',
     declaration: 'export interface RsiMergeResult {\n    readonly generation: RsiGeneration;\n    readonly cycle: RsiCycleRecord;\n    readonly archived: RsiArchiveEntry;\n    readonly ledger: RsiLedgerOutcome;\n    readonly source: RsiDecisionSource;\n}',
   },
@@ -7035,7 +7061,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RsiStatusView',
-    declaration: 'export interface RsiStatusView {\n    readonly active: RsiGeneration;\n    readonly daemon: RsiGeneration;\n    readonly threshold: number;\n    readonly daemonEnabled: boolean;\n    readonly lastCycle?: RsiCycleRecord | undefined;\n    readonly pending?: RsiPendingCandidate | undefined;\n    readonly cycleRunning: boolean;\n    readonly archiveCount: number;\n    readonly incidents: readonly RsiIncidentRecord[];\n    readonly knowledgeCutoffAt?: number | undefined;\n    readonly unseenSessionCount: number;\n}',
+    declaration: 'export interface RsiStatusView {\n    readonly active: RsiGeneration;\n    readonly daemon: RsiGeneration;\n    readonly threshold: number;\n    readonly daemonEnabled: boolean;\n    readonly mergePolicy: RsiMergePolicy;\n    readonly lastCycle?: RsiCycleRecord | undefined;\n    readonly pending?: RsiPendingCandidate | undefined;\n    readonly cycleRunning: boolean;\n    readonly archiveCount: number;\n    readonly incidents: readonly RsiIncidentRecord[];\n    readonly knowledgeCutoffAt?: number | undefined;\n    readonly unseenSessionCount: number;\n}',
   },
   {
     name: 'RunnerFailureRule',

@@ -18,3 +18,5 @@
       name: '@deepseek-ai/dsh-experimental-dual-core-rsi'
       config:
         threshold: 0.05
+    - id: ui-rsi
+      name: '@deepseek-ai/dsh-experimental-client-ui-rsi'

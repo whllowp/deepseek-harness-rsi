@@ -3,14 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.1-rc.2/dual-core-rsi-consult-merge/guide.md
 /:
-  en: 00286101c672dc55
-  zh: 8dc04ae84cfe0107
-/dual-core-rsi-daemonizes-and-gates-every-swap-on-a-human-merge-decision:
-  en: b2ea75d1ea76803d
-  zh: 0aa963aeb58cca69
-/dual-core-rsi-daemonizes-and-gates-every-swap-on-a-human-merge-decision/change:
-  en: f8f6f00ed444f4f2
-  zh: 6085372bb005b159
-/dual-core-rsi-daemonizes-and-gates-every-swap-on-a-human-merge-decision/migration:
-  en: a68f2f59d5442fc6
-  zh: 2df19efa9f695a75
+  en: e88f1785812d78ca
+  zh: 695ca965d94936b9
+/dual-core-rsi-self-evolves-in-the-background-and-shows-its-work-in-the-sidebar:
+  en: 996d29ec22a15004
+  zh: 7dfaa1c01e43a0d4
+/dual-core-rsi-self-evolves-in-the-background-and-shows-its-work-in-the-sidebar/change:
+  en: 0959a1a4ebb4b840
+  zh: 46149f32dda7c924
+/dual-core-rsi-self-evolves-in-the-background-and-shows-its-work-in-the-sidebar/migration:
+  en: 5c2481255cd62829
+  zh: 4486c19194251bff

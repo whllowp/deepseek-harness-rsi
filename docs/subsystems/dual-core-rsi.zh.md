@@ -69,7 +69,7 @@ interface RsiBenchmarkReport {
 
 ## Cycles, decisions, and rollback
 
-每个已结算的循环记录其触发来源、双方得分、提升幅度与蒸馏器的一行理由。候选超过阈值的循环以 `pending` 结算；人类的 `merged` 或 `declined` 决策在落定时盖章到记录上。回滚恢复一个归档世代、拒绝任何仍待决的提议，并以 `rollback` 原因归档被替换代，因此每次合入与回滚都可逆。
+每个已结算的循环记录其触发来源、双方得分、提升幅度与蒸馏器的一行理由。默认 `auto` 策略下，候选超过阈值的循环以 `promoted` 结算且决策为 `merged`，因为守护核在后台直接采纳它；`consult` 下则以 `pending` 结算，人类的 `merged` 或 `declined` 决策在落定时盖章到记录上。回滚恢复一个归档世代、拒绝任何仍待决的提议，并以 `rollback` 原因归档被替换代，因此每次合入与回滚都可逆。
 
 ```ts type-equiv
 /** Durable record of one completed daemon distillation cycle. */
@@ -125,6 +125,33 @@ interface RsiIncidentRecord {
   readonly recovery: RsiIncidentRecovery
   /** Milliseconds the daemon waits before its next attempt or interval tick. */
   readonly retryAfterMs: number
+}
+```
+
+## Activity view
+
+`activity` Remote 查询为“自进化”侧边栏面板等客户端界面投影守护核在后台完成的工作：最新 20 次已采纳的进化与最新 20 条自我修复事件，按时间倒序。
+
+```ts type-equiv
+/**
+ * One background evolution shown to the user: a policy the daemon adopted
+ * (automatically under `auto`, or through a human merge under `consult`).
+ */
+interface RsiEvolutionEntry {
+  readonly cycleId: RsiCycleId
+  /** Generation that became the active policy. */
+  readonly generationId: RsiGenerationId
+  readonly trigger: RsiCycleTrigger
+  /** Safe-integer epoch milliseconds of adoption. */
+  readonly adoptedAt: number
+  readonly baselineScore: number
+  readonly candidateScore: number
+  readonly improvement: number
+  readonly rationale: string
+  /** Adopted guidance lines, in order. */
+  readonly guidance: readonly string[]
+  /** Names of the adopted skill documents. */
+  readonly skills: readonly string[]
 }
 ```
 
@@ -204,15 +231,26 @@ async status(): Promise<RsiStatusView>
 async history(limit: number = 20): Promise<{ cycles: RsiCycleRecord[]; archives: RsiArchiveEntry[]; incidents: RsiIncidentRecord[] }>
 
 /**
- * Start one daemon cycle as a background job the daemon core owns; the
- * job streams cycle narration and never blocks the caller's step.
+ * Read the daemon's recent background evolutions and self-repairs for
+ * client surfaces (the sidebar panel), bounded and newest first.
+ * @returns the activity view.
+ */
+@Remote('activity') async activity(): Promise<RsiActivityView>
+
+/**
+ * Start one human-requested daemon cycle as a background job; the job
+ * streams cycle narration and never blocks the caller's step. An owning
+ * session places the job under that agent's job controller, which the Web
+ * composition mounts per agent; without one the job is unowned and needs a
+ * context-global controller.
  * @param trigger - what started the cycle.
+ * @param owner - session whose live agent owns the job, when one requested it.
  * @returns the registry-issued job id.
  */
-startDaemonJob(trigger: RsiCycleTrigger): JobId
+startDaemonJob(trigger: RsiCycleTrigger, owner?: SessionId): JobId
 ```
 
-Types: [JobId](jobs.zh.md)
+Types: [JobId](jobs.zh.md) · [SessionId](core.zh.md)
 
 Source: [`packages/experimental/dual-core-rsi/src/index.ts`](../../packages/experimental/dual-core-rsi/src/index.ts)
 
@@ -251,4 +289,26 @@ abstract distill(input: RsiDistillInput, options: RsiDistillOptions): Promise<Rs
 ```
 
 Source: [`packages/experimental/dual-core-rsi/src/distiller.ts`](../../packages/experimental/dual-core-rsi/src/distiller.ts)
+
+<a id="dual-core-rsi-events"></a>
+
+### `dual-core-rsi/*` events
+
+<a id="dual-core-rsichanged--emit"></a>
+
+#### `dual-core-rsi/changed` — emit
+
+Durable dual-core RSI activity changed: a cycle settled, a candidate was adopted or declined, an incident landed, or a rollback ran; clients refetch the activity view.
+
+```ts cordis-catalog
+/**
+ * Durable dual-core RSI activity changed: a cycle settled, a candidate was
+ * adopted or declined, an incident landed, or a rollback ran; clients
+ * refetch the activity view.
+ * @mode emit
+ */
+'dual-core-rsi/changed'(): void
+```
+
+Source: [`packages/experimental/dual-core-rsi/src/types.ts`](../../packages/experimental/dual-core-rsi/src/types.ts)
 <!-- END GENERATED cordis-surface -->

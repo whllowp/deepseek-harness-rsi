@@ -1049,7 +1049,7 @@ export type Config = CuaConfig
 ## `@deepseek-ai/dsh-experimental-dual-core-rsi`
 
 - `inject`: `agents` · `sessions` · `sessionProjections` · `systemPrompt` · `storageDomain` · `rsiDistiller` · `rsiBenchmark` · `tools` · `commands` · `jobs` · `subprocess`
-- `source`: [`packages/experimental/dual-core-rsi/src/index.ts:92`](../packages/experimental/dual-core-rsi/src/index.ts)
+- `source`: [`packages/experimental/dual-core-rsi/src/index.ts:95`](../packages/experimental/dual-core-rsi/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. Every deployment-varying choice is a validated field. */
@@ -1078,6 +1078,8 @@ export interface Config {
   digestIncludeStoredSessions?: boolean
   /** Whether the scheduled daemon driver runs cycles without a manual command (default true). */
   daemonEnabled?: boolean
+  /** How a gate-passing candidate is adopted: merged in the background (default `auto`) or parked for a human decision (`consult`). */
+  mergePolicy?: RsiMergePolicy
   /** Milliseconds between scheduled daemon ticks (default 600000). */
   daemonIntervalMs?: number
   /** Failed-attempt retries per scheduled daemon round beyond the first attempt (default 2, maximum 10). */
@@ -1091,6 +1093,13 @@ export interface Config {
   /** Directory of the local git ledger recording merged and rolled-back policies (default `~/.dsh/dual-core-rsi-ledger`). */
   ledgerDir?: string
 }
+
+/**
+ * How a gate-passing candidate is adopted. `auto` merges it in the background
+ * without any human input; `consult` parks it as pending and asks the human
+ * when the session exits.
+ */
+export type RsiMergePolicy = 'auto' | 'consult'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-dual-core-rsi -->
 
@@ -4713,6 +4722,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-experimental-auto-review` | `approval` · `llm` · `permissionPresets` · `sessions` · `tools` · `workingDirectory` | [`packages/experimental/auto-review/src/index.ts`](../packages/experimental/auto-review/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-client-ui-agent-team` | — | [`packages/experimental/client-ui-agent-team/src/index.ts`](../packages/experimental/client-ui-agent-team/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-client-ui-claude-code-mods` | — | [`packages/experimental/client-ui-claude-code-mods/src/index.ts`](../packages/experimental/client-ui-claude-code-mods/src/index.ts) |
+| `@deepseek-ai/dsh-experimental-client-ui-rsi` | — | [`packages/experimental/client-ui-rsi/src/index.ts`](../packages/experimental/client-ui-rsi/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-client-ui-voice-input` | — | [`packages/experimental/client-ui-voice-input/src/index.ts`](../packages/experimental/client-ui-voice-input/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-computer-use-cua-driver-native` | `computerUse` · `tools` · `systemPrompt` | [`packages/experimental/computer-use-cua-driver-native/src/index.ts`](../packages/experimental/computer-use-cua-driver-native/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-session-inspector` | — | [`packages/experimental/session-inspector/src/index.ts`](../packages/experimental/session-inspector/src/index.ts) |

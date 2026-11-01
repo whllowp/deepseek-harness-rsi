@@ -1,5 +1,5 @@
 ---
-description: "Dual-core RSI mode: a default-on daemon core distills the user core, benchmarks candidates, and offers gate-passing candidates for a human merge decision recorded in a local git ledger."
+description: "Dual-core RSI mode: a default-on daemon core distills the user core, adopts gate-passing candidates in the background, and shows every evolution and repair in a left-sidebar panel."
 kind: "package-bundle"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Add the experimental dual-core RSI mode to the harness as a switched-off optional layer. When enabled, a daemon core distills the user core's live sessions into bounded policy artifacts on its own schedule, benchmarks candidates, and past a 5% improvement threshold parks the candidate as a pending merge offer; a human merge replaces the policy, archives the replaced surface, and records the change in a local git ledger.
+Add the experimental dual-core RSI mode to the harness as a switched-off optional layer. When enabled, a daemon core distills the user core's live sessions into bounded policy artifacts on its own schedule, benchmarks candidates, and past a 5% improvement threshold adopts the candidate in the background with no input, archiving the replaced surface and recording the change in a local git ledger; a left-sidebar panel lists every evolution and self-repair.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ Add the experimental dual-core RSI mode to the harness as a switched-off optiona
 
 In Web or Desktop, open Plugins and enable **Dual-core RSI** in Official. Switch it off to remove its profile layer.
 
-Enabling the bundle mounts the subagent distiller, a fixture benchmark, and the dual-core RSI service with its tools and `/rsi` command in the running Host. The scheduled daemon cycles on fresh session activity — `/rsi run` only forces one immediately; the shipped fixture benchmark checks that the distilled policy carries verification guidance and stays inside the guidance budget, so it demonstrates the merge gate rather than end-task quality.
+Enabling the bundle mounts the subagent distiller, a fixture benchmark, the dual-core RSI service with its tools and `/rsi` command in the running Host, and the Self-evolution sidebar panel in the Web client. The scheduled daemon cycles on fresh session activity and adopts qualifying candidates by itself — `/rsi run` only forces one immediately; the shipped fixture benchmark checks that the distilled policy carries verification guidance and stays inside the guidance budget, so it demonstrates the adoption gate rather than end-task quality.
 
 -----
 
@@ -37,7 +37,7 @@ Enabling the bundle mounts the subagent distiller, a fixture benchmark, and the 
 <details>
 <summary>Implementation details — click to expand</summary>
 
-[`cordis.patch.yml`](cordis.patch.yml) inserts the subagent distiller (`spawn` provider), the fixture benchmark with its default cases, and the dual-core RSI service at the default 5% threshold. Later profile patches can replace any row's configuration or disable it by row id; an override alone does not select the bundle. The [profile composer](../../boot/app-boot/README.md) owns patch ordering and errors.
+[`cordis.patch.yml`](cordis.patch.yml) inserts the subagent distiller (`spawn` provider), the fixture benchmark with its default cases, the dual-core RSI service at the default 5% threshold, and the [Self-evolution panel](../client-ui-rsi/README.md) client row. Later profile patches can replace any row's configuration or disable it by row id; an override alone does not select the bundle. The [profile composer](../../boot/app-boot/README.md) owns patch ordering and errors.
 
 </details>
 

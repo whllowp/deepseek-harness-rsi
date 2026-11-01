@@ -1,5 +1,5 @@
 ---
-description: "Dual-core recursive self-improvement: a default-on daemon core distills the user core's sessions into bounded policy artifacts, a gate-passing candidate waits for the human's merge decision as the session exits, and each merge is recorded in a local git ledger for rollback, for users and maintainers evaluating self-improving harness modes."
+description: "Dual-core recursive self-improvement: a default-on daemon core distills the user core's sessions into bounded policy artifacts, adopts gate-passing candidates in the background with no user input, repairs its own failed cycles, records each adoption in a local git ledger, and shows every evolution and repair in a left-sidebar panel, for users and maintainers evaluating self-improving harness modes."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dual-core-rsi` runs the harness with two cores. The user core is the interactive agent surface; the daemon core is a distillation loop that never talks to the human and runs by default, cycling on fresh session activity and self-repairing its failures. Each cycle distills a bounded artifact set through a fresh subagent; past the threshold it waits as a pending merge offer. At session exit the daemon asks a merge question with the session's fix and improvement points; merging replaces the policy and records the change in a local git ledger. The experimental mode scores policy conformance, not end-task quality.
+`dual-core-rsi` runs the harness with two cores. The user core is the interactive agent surface; the daemon core is a distillation loop that never talks to the human and runs by default, cycling on fresh session activity and repairing its own failures. Each cycle distills a bounded artifact set through a fresh subagent; past the threshold the daemon adopts it in the background, with no input, and records it in a local git ledger. A left-sidebar panel lists every evolution and repair. The experimental mode scores policy conformance, not end-task quality.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-Enable the [dual-core RSI bundle](../dual-core-rsi-bundle/README.md) in Plugins (it ships switched off), or compose this package directly after mounting one `ctx.rsiDistiller` provider and one `ctx.rsiBenchmark` provider. The service fails loud at load when either provider is absent, and it requires the `subprocess` service for the git ledger.
+Enable the [dual-core RSI bundle](../dual-core-rsi-bundle/README.md) in Plugins (it ships switched off), or compose this package directly after mounting one `ctx.rsiDistiller` provider and one `ctx.rsiBenchmark` provider. The service fails loud at load when either provider is absent, and it requires the `subprocess` service for the git ledger. The bundle also mounts the [Self-evolution sidebar panel](../client-ui-rsi/README.md), which reads this service's `activity` Remote query.
 
 ### The daemon runs by default
 
@@ -35,15 +35,15 @@ No command starts the loop: a tick every `daemonIntervalMs` starts one scheduled
 
 ### What a cycle does
 
-The daemon assembles a bounded digest of the newest live sessions plus — through `ctx.sessionQuery`, when composed — recent closed sessions filling any remaining slots, so knowledge from sessions you already closed still reaches the distiller. Within the per-session budget the digest keeps the MOST RECENT text (late-session corrections outrank early chatter), and every settled cycle stamps a knowledge cutoff. It then asks the distiller for one complete next artifact set with a rationale, decodes it against the configured budgets, benchmarks the candidate and the active core, and records the outcome. Improvement above the threshold parks the candidate as the pending merge offer (a later, better candidate replaces it; the active policy never changes on its own); otherwise the daemon keeps the better of its own lineage and the candidate for the next cycle. A failed or cancelled cycle changes nothing: durable writes settle after evaluation, and the final state-pointer write is the commit point.
+The daemon assembles a bounded digest of the newest live sessions plus — through `ctx.sessionQuery`, when composed — recent closed sessions filling any remaining slots, so knowledge from sessions you already closed still reaches the distiller. Within the per-session budget the digest keeps the MOST RECENT text (late-session corrections outrank early chatter), and every settled cycle stamps a knowledge cutoff. It then asks the distiller for one complete next artifact set with a rationale, decodes it against the configured budgets, benchmarks the candidate and the active core, and records the outcome. Improvement above the threshold is adopted according to `mergePolicy`: under the default `auto`, the daemon swaps the candidate in itself — archiving the replaced surface, re-applying artifacts to live agents, and committing the git ledger — with no human input; under `consult`, the candidate parks as the pending merge offer (a later, better candidate replaces it) and the active policy never changes on its own. Otherwise the daemon keeps the better of its own lineage and the candidate for the next cycle. A failed or cancelled cycle changes nothing: durable writes settle after evaluation, and the final state-pointer write is the commit point.
 
-### Merging at session exit
+### Merging at session exit (consult policy)
 
-When the last live session exits with an offer pending, the daemon summarizes the session — improvement points from the pending candidate and fix points from its recorded self-repairs — and asks one question: merge, or keep the current policy. Answering Merge replaces the active policy, archives the replaced surface for `/rsi rollback`, seeds the daemon from the merged generation, and commits the adopted policy to the local git ledger. Answering Keep declines the candidate; nothing changes. `/rsi merge`, `/rsi decline`, and `/rsi summary` make the same decision and preview the same summary at any time. Without a user-questions answerer (headless compositions), the offer simply stays pending with a logged pointer to the commands — the daemon never replaces your policy without a human decision.
+Under `mergePolicy: consult` only: when the last live session exits with an offer pending, the daemon summarizes the session — improvement points from the pending candidate and fix points from its recorded self-repairs — and asks one question: merge, or keep the current policy. Answering Merge replaces the active policy, archives the replaced surface for `/rsi rollback`, seeds the daemon from the merged generation, and commits the adopted policy to the local git ledger. Answering Keep declines the candidate; nothing changes. `/rsi merge`, `/rsi decline`, and `/rsi summary` make the same decision and preview the same summary at any time. Without a user-questions answerer (headless compositions), the offer simply stays pending with a logged pointer to the commands — the daemon never replaces your policy without a human decision.
 
 ### The git ledger
 
-Every merge and every rollback materializes the adopted artifact set as plain files (`policy/guidance.md`, `policy/skills/*.md`, `policy/meta.json`) inside a dedicated git repository at `ledgerDir` (default `~/.dsh/dual-core-rsi-ledger`) and commits it. `git log` names each change point with its generation, score, and rationale; `git show` diffs any two adopted policies. The repository belongs to the daemon and never touches your project working tree. A missing `git` executable or a failing commit never undoes the durable swap: the archive still covers rollback, and the gap is reported in the merge result and logs.
+Every adoption — automatic or by merge — and every rollback materializes the adopted artifact set as plain files (`policy/guidance.md`, `policy/skills/*.md`, `policy/meta.json`) inside a dedicated git repository at `ledgerDir` (default `~/.dsh/dual-core-rsi-ledger`) and commits it. `git log` names each change point with its generation, score, and rationale; `git show` diffs any two adopted policies. The repository belongs to the daemon and never touches your project working tree. A missing `git` executable or a failing commit never undoes the durable swap: the archive still covers rollback, and the gap is reported in the merge result and logs.
 
 ### Knowing when the policy went stale
 
@@ -65,6 +65,7 @@ Every merge and every rollback materializes the adopted artifact set as plain fi
 | `runWaitMs` | `120000` | How long `/rsi run` waits before reporting background continuation. |
 | `digestIncludeStoredSessions` | `true` | Whether recent closed sessions join the digest through `ctx.sessionQuery`. |
 | `daemonEnabled` | `true` | Whether the scheduled daemon ticks run cycles on their own. |
+| `mergePolicy` | `auto` | How a gate-passing candidate is adopted: in the background with no input (`auto`) or parked for a human merge decision (`consult`). |
 | `daemonIntervalMs` | `600000` | Milliseconds between scheduled daemon ticks. |
 | `daemonMaxRetries` | `2` | Failed-attempt retries per scheduled round beyond the first attempt. |
 | `daemonRetryBackoffMs` | `30000` | Backoff before a retried scheduled attempt. |
@@ -194,7 +195,8 @@ Each daemon child has an independent request cache; no user-core cache is affect
 These limits define what the mode does not yet support. They are current constraints, not a task backlog.
 
 - **The shipped benchmark scores policy conformance, not end-task quality** — the fixture provider checks that the distilled surface carries the configured policy; an end-task benchmark lane (replayed sessions scored on deliverables) is deferred and is the mode's main evaluation gap.
-- **The exit consult needs a `ctx.userQuestions` answerer** — without one the offer stays pending and the `/rsi merge` and `/rsi decline` commands carry the decision.
+- **Automatic adoption trusts the benchmark** — under the default `auto` policy every candidate that beats the threshold replaces the policy without review; the archive, `/rsi rollback`, and the git ledger are the recovery path, and `mergePolicy: consult` restores a human gate.
+- **The exit consult needs a `ctx.userQuestions` answerer** — under `consult`, without one the offer stays pending and the `/rsi merge` and `/rsi decline` commands carry the decision.
 - **The git ledger needs a local `git` executable** — without it merges still settle and the archive covers rollback, but the ledger stays unwritten and the gap is reported.
 - **Stored-session enrichment needs `ctx.sessionQuery`** — without it the digest covers live sessions only; the shipped base composition provides the seam.
 - **One distiller child per cycle** — there is no candidate fan-out, probe isolation, or blind selection as in the Harness² method this mode borrows its discipline from.

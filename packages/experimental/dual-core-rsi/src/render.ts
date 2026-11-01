@@ -56,7 +56,7 @@ export function cycleOutcomeLabel(record: RsiCycleRecord): string {
         : 'found a clearly better policy that waits for your merge decision'
   }
   return record.outcome === 'promoted'
-    ? 'adopted a new working policy (records predate merge decisions)'
+    ? 'adopted a new working policy in the background'
     : 'kept the current policy; the candidate did not score clearly better'
 }
 
@@ -70,7 +70,9 @@ export function renderStatus(view: RsiStatusView): string {
     RSI_MODE_SUMMARY,
     `User core: ${renderGeneration(view.active)}`,
     `Daemon core: ${renderGeneration(view.daemon)}`,
-    `Swap gate: a merge is offered when benchmark improvement exceeds ${formatPercent(view.threshold)}`,
+    view.mergePolicy === 'consult'
+      ? `Swap gate: a merge is offered when benchmark improvement exceeds ${formatPercent(view.threshold)}`
+      : `Swap gate: improvement above ${formatPercent(view.threshold)} is adopted in the background`,
     `Daemon: ${view.daemonEnabled ? 'scheduled ticks armed; cycles run on their own when new session activity waits' : 'disabled (daemonEnabled: false); cycles run only through /rsi run or rsi_run'}`,
     `Cycle: ${view.cycleRunning ? 'running' : 'idle'}`,
   ]
