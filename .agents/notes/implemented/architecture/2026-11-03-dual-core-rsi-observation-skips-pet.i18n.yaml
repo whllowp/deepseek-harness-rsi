@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-11-03-dual-core-rsi-observation-skips-pet.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-03-dual-core-rsi-observation-skips-pet.md
+/agent-note-observation-driven-cycle-skips-and-the-pixel-hero-companion:
+  en: 825f56e199b45adb
+  zh: 3f81a8d3066fa81c
+/agent-note-observation-driven-cycle-skips-and-the-pixel-hero-companion/problem:
+  en: 3dfb394682bd5fce
+  zh: a7f530b60ff9b874
+/agent-note-observation-driven-cycle-skips-and-the-pixel-hero-companion/decision:
+  en: 51eac78af2a08219
+  zh: 02087f1baf89e554
+/agent-note-observation-driven-cycle-skips-and-the-pixel-hero-companion/consequences:
+  en: af4ab70b7f7ff75c
+  zh: e55586f115b56d37
+/agent-note-observation-driven-cycle-skips-and-the-pixel-hero-companion/alternatives-considered:
+  en: 8041890ae3881a25
+  zh: bdc1e2b35ae930b8

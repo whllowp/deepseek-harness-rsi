@@ -29,6 +29,7 @@ function mount(snapshot: ActivitySnapshot, dictionary: typeof en | typeof zh = e
 const POPULATED: RsiActivityView = {
   daemonEnabled: true,
   mergePolicy: 'auto',
+  cycleRunning: false,
   evolutions: [
     {
       cycleId: '2' as never,
@@ -94,7 +95,7 @@ describe('RsiPanel', () => {
   })
 
   it('renders the empty state with the manual-only consult policy line', () => {
-    mount({ status: 'ready', view: { daemonEnabled: false, mergePolicy: 'consult', evolutions: [], repairs: [] }, error: null })
+    mount({ status: 'ready', view: { daemonEnabled: false, mergePolicy: 'consult', cycleRunning: false, evolutions: [], repairs: [] }, error: null })
     expect(screen.getByText(/Daemon core disabled/)).toBeTruthy()
     expect(screen.getByText(/Qualifying candidates wait for your merge/)).toBeTruthy()
     expect(screen.getByText(/No background activity yet/)).toBeTruthy()

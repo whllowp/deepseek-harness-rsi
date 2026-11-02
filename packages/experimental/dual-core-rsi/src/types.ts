@@ -260,6 +260,8 @@ export interface RsiActivityView {
   /** Whether the scheduled daemon driver is armed. */
   readonly daemonEnabled: boolean
   readonly mergePolicy: RsiMergePolicy
+  /** Whether a daemon cycle is running right now. */
+  readonly cycleRunning: boolean
   /** Newest evolutions first (bounded). */
   readonly evolutions: readonly RsiEvolutionEntry[]
   /** Newest recorded self-repairs first (bounded). */

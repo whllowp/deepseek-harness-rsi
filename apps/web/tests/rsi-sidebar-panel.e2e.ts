@@ -37,9 +37,12 @@ describe('web e2e: dual-core RSI Self-evolution sidebar panel', () => {
     let attempts = 0
     scaffold.ctx.rsiDistiller.distill = () => {
       attempts += 1
-      return attempts === 1
-        ? Promise.reject(new Error('distiller offline'))
-        : Promise.resolve(EVOLVED)
+      if (attempts === 1) return Promise.reject(new Error('distiller offline'))
+      // The second proposal wins adoption; every later one fails again so the
+      // daemon keeps recording fresh repairs the hero reacts to.
+      return attempts === 2
+        ? Promise.resolve(EVOLVED)
+        : Promise.reject(new Error(`distiller offline again (attempt ${attempts})`))
     }
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
@@ -97,6 +100,15 @@ describe('web e2e: dual-core RSI Self-evolution sidebar panel', () => {
     await panel.getByText(/^retried after 200 ms$/u).waitFor()
     await panel.getByText('attempt 1').waitFor()
 
+    // The pixel-hero companion reacts to the same background work: with the
+    // distiller failing again, every scheduled round records a fresh repair
+    // the hero flashes for, and its button opens the panel above.
+    const hero = page.locator('[data-hero-pose]')
+    await hero.waitFor({ timeout: 15_000 })
+    await expect.poll(async () => hero.getAttribute('data-hero-pose'), { timeout: 30_000 }).toBe('hurt')
+    await page.locator('button[class*=openPanel]').click()
+    await page.getByRole('button', { name: 'Self-evolution', exact: true }).waitFor({ timeout: 15_000 })
+
     expect(tripwire.pageErrors).toEqual([])
-  }, 90_000)
+  }, 180_000)
 })

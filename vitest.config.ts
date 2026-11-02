@@ -340,6 +340,8 @@ export default defineConfig({
         // The self-evolution entry imports the generated dual-core RSI Remote contribution, which
         // exists only in lib; source tests cover mountRsiPanel and load the entry with that Remote mocked.
         'packages/experimental/client-ui-rsi/src/client/index.ts',
+        // The hero entry binds the same covered mount lifecycle; source tests cover mountZeldaPet directly.
+        'packages/experimental/client-ui-zelda-pet/src/client/index.ts',
         // Slash/command/input round: per-file gaps deferred with the same
         // client-lane debt. TODO(gui): cover and remove with the lane above.
         'packages/client/ui-commands/src/index.ts',

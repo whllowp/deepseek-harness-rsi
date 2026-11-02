@@ -6,6 +6,7 @@ import { createActivitySource } from '../src/client/activity-source.ts'
 const VIEW: RsiActivityView = {
   daemonEnabled: true,
   mergePolicy: 'auto',
+  cycleRunning: false,
   evolutions: [],
   repairs: [],
 }

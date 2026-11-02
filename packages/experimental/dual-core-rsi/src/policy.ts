@@ -93,6 +93,29 @@ export function decodeArtifacts(value: unknown, budgets: RsiArtifactBudgets): Rs
 }
 
 /**
+ * Compare two artifact sets by content: same guidance lines in order and the
+ * same skills by every field. Artifact sets are plain validated data, so a
+ * structural compare decides equality without hashing or ordering games.
+ * @param left - one validated artifact set.
+ * @param right - the other validated artifact set.
+ * @returns whether the two sets carry identical content.
+ */
+export function artifactsEqual(left: RsiArtifacts, right: RsiArtifacts): boolean {
+  if (left === right) return true
+  if (left.guidance.length !== right.guidance.length || left.skills.length !== right.skills.length) return false
+  for (let index = 0; index < left.guidance.length; index += 1) {
+    if (left.guidance[index] !== right.guidance[index]) return false
+  }
+  for (let index = 0; index < left.skills.length; index += 1) {
+    const a = left.skills[index]
+    const b = right.skills[index]
+    if (a === undefined || b === undefined
+      || a.name !== b.name || a.description !== b.description || a.content !== b.content) return false
+  }
+  return true
+}
+
+/**
  * Report whether an artifact set renders no prompt content at all.
  * @param artifacts - the artifact set to inspect.
  * @returns whether both the guidance and skills lists are empty.

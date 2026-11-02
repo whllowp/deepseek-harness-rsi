@@ -28,3 +28,7 @@
       name: '@deepseek-ai/dsh-experimental-client-ui-rsi'
       config:
         refreshIntervalMs: 1000
+    - id: ui-zelda-pet
+      name: '@deepseek-ai/dsh-experimental-client-ui-zelda-pet'
+      config:
+        refreshIntervalMs: 1000

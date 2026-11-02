@@ -1,0 +1,96 @@
+.stage {
+  position: fixed;
+  /* Sit above the content but never block it: only the companion itself is hit-testable. */
+  z-index: 40;
+  right: 16px;
+  bottom: 12px;
+  pointer-events: none;
+}
+
+.companion {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: auto;
+}
+
+.bubble {
+  max-width: 260px;
+  margin-bottom: 4px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.sprite {
+  image-rendering: pixelated;
+  /* The idle walk: a gentle four-step bob the whole stage shares. */
+  animation: petWalk 1.2s steps(4, end) infinite;
+}
+
+/* Distilling: stand still and hum with the daemon's work. */
+.companion[data-hero-pose='distilling'] .sprite {
+  animation: petHum 0.6s ease-in-out infinite alternate;
+}
+
+/* Hurt: a self-repair landed; flash the hero. */
+.companion[data-hero-pose='hurt'] .sprite {
+  animation: petFlash 0.24s steps(2, end) 5;
+  filter: saturate(0.4) sepia(0.4);
+}
+
+/* Level up: an evolution was adopted; glow and hop. */
+.companion[data-hero-pose='levelUp'] .sprite {
+  animation: petHop 0.5s ease-out 3;
+  filter: drop-shadow(0 0 6px rgb(255 214 92 / 0.9));
+}
+
+.companion[data-hero-active='false'] .sprite {
+  animation: none;
+  filter: grayscale(0.8);
+  opacity: 0.6;
+}
+
+.status {
+  color: var(--dsw-alias-label-caption);
+  font-size: 11px;
+}
+
+.openPanel {
+  padding: 2px 8px;
+  border: none;
+  border-radius: 6px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+@keyframes petWalk {
+  0% { transform: translateY(0); }
+  25% { transform: translateY(-2px); }
+  50% { transform: translateY(0); }
+  75% { transform: translateY(-1px); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes petHum {
+  from { transform: translateY(0) scale(1); }
+  to { transform: translateY(-3px) scale(1.04); }
+}
+
+@keyframes petFlash {
+  0% { opacity: 1; }
+  100% { opacity: 0.35; }
+}
+
+@keyframes petHop {
+  0% { transform: translateY(0); }
+  40% { transform: translateY(-10px); }
+  100% { transform: translateY(0); }
+}

@@ -6929,7 +6929,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RsiActivityView',
-    declaration: 'export interface RsiActivityView {\n    readonly daemonEnabled: boolean;\n    readonly mergePolicy: RsiMergePolicy;\n    readonly evolutions: readonly RsiEvolutionEntry[];\n    readonly repairs: readonly RsiIncidentRecord[];\n}',
+    declaration: 'export interface RsiActivityView {\n    readonly daemonEnabled: boolean;\n    readonly mergePolicy: RsiMergePolicy;\n    readonly cycleRunning: boolean;\n    readonly evolutions: readonly RsiEvolutionEntry[];\n    readonly repairs: readonly RsiIncidentRecord[];\n}',
   },
   {
     name: 'RsiArchiveEntry',

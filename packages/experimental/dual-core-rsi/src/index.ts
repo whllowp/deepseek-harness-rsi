@@ -29,7 +29,7 @@ import type { RsiStateRecord } from './domain.ts'
 import { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId } from './branding.ts'
 import { RsiLedger } from './ledger.ts'
 import type { RsiLedgerOutcome } from './ledger.ts'
-import { applyArtifacts } from './policy.ts'
+import { applyArtifacts, artifactsEqual } from './policy.ts'
 import {
   RSI_CYCLE_COST_NOTE, renderCycleRecord, renderDeclineResult, renderExitSummary, renderHistory,
   renderMergeResult, renderRollback, renderStatus,
@@ -540,6 +540,14 @@ export class DualCoreRsiService extends TypertRemoteService {
     try {
       const startedAt = Date.now()
       const active = await this.ensureBenchmark(this.activeGeneration(), signal)
+      const baselineScore = this.requiredScore(active)
+      // Saturation skip: scores are bounded by 1, so once the active policy
+      // sits within the threshold of the ceiling no candidate can clear the
+      // gate. Settle retained without spending a distillation child.
+      if (baselineScore > 1 - this.resolved.threshold) {
+        return await this.settleRetained(trigger, startedAt, baselineScore, active.id,
+          'the active policy already saturates the benchmark; no candidate can clear the threshold')
+      }
       const daemon = this.daemonGeneration()
       const digest = await assembleDigest(this.ctx, {
         maxSessions: this.resolved.digestMaxSessions,
@@ -550,6 +558,12 @@ export class DualCoreRsiService extends TypertRemoteService {
         { active, daemon, digest, budgets: this.resolved },
         { parent: anchor, signal },
       )
+      // Content-dedup skip: a candidate carrying the active policy's exact
+      // content scores identically on a deterministic benchmark, so the cycle
+      // is retained before the evaluation writes anything.
+      if (artifactsEqual(output.artifacts, active.artifacts)) {
+        return await this.settleRetained(trigger, startedAt, baselineScore, active.id, output.rationale)
+      }
       const candidate = await this.evaluate({
         id: this.mintGenerationId(),
         origin: 'distilled',
@@ -557,7 +571,6 @@ export class DualCoreRsiService extends TypertRemoteService {
         createdAt: Date.now(),
         artifacts: output.artifacts,
       }, signal)
-      const baselineScore = this.requiredScore(active)
       const candidateScore = this.requiredScore(candidate)
       const improvement = candidateScore - baselineScore
       const cycleId = RsiCycleId(String(this.state.cycleCounter + 1))
@@ -617,6 +630,45 @@ export class DualCoreRsiService extends TypertRemoteService {
     } finally {
       this.cycleRunning = false
     }
+  }
+
+  /**
+   * Settle one cycle as retained without touching any generation: record the
+   * cycle, advance the knowledge cutoff, and commit. Shared by the
+   * observation-driven skips (saturation and content dedup) and usable by the
+   * ordinary retained path.
+   * @param trigger - what started the cycle.
+   * @param startedAt - wall-clock start of the cycle.
+   * @param score - the score both sides settle at.
+   * @param heldId - generation the cycle held (the active policy).
+   * @param rationale - one-line reason the cycle retained.
+   * @returns the settled cycle record.
+   */
+  private async settleRetained(
+    trigger: RsiCycleTrigger,
+    startedAt: number,
+    score: number,
+    heldId: RsiGenerationId,
+    rationale: string,
+  ): Promise<RsiCycleRecord> {
+    const record: RsiCycleRecord = {
+      id: RsiCycleId(String(this.state.cycleCounter + 1)),
+      trigger,
+      startedAt,
+      settledAt: Date.now(),
+      outcome: 'retained',
+      baselineScore: score,
+      candidateScore: score,
+      improvement: 0,
+      threshold: this.resolved.threshold,
+      candidateId: heldId,
+      rationale,
+    }
+    this.state = { ...this.state, cycleCounter: this.state.cycleCounter + 1, knowledgeCutoffAt: Date.now() }
+    await this.domain.table('cycles').put(record.id, record)
+    await this.commitState()
+    this.notifyChanged()
+    return record
   }
 
   /** Evaluate a generation without a benchmark report and persist the baseline. */
@@ -863,6 +915,7 @@ export class DualCoreRsiService extends TypertRemoteService {
     return {
       daemonEnabled: this.resolved.daemonEnabled,
       mergePolicy: this.resolved.mergePolicy,
+      cycleRunning: this.cycleRunning,
       evolutions,
       repairs,
     }

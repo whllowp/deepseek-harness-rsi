@@ -20,3 +20,5 @@
         threshold: 0.05
     - id: ui-rsi
       name: '@deepseek-ai/dsh-experimental-client-ui-rsi'
+    - id: ui-zelda-pet
+      name: '@deepseek-ai/dsh-experimental-client-ui-zelda-pet'

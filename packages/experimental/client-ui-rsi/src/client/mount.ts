@@ -48,10 +48,19 @@ export const inject = ['remote', 'slots', 'locale']
 function registerUi(ctx: ClientContext, refreshIntervalMs: number): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-rsi: dictionaries')
   const t = ctx.locale.bind(NS)
+  // Register the reset dispatch once, synchronously with the mount: React may
+  // first subscribe the store long after this context could have been retired.
+  const resetListeners = new Set<() => void>()
+  ctx.effect(() => [
+    ctx.on('connection/reset', () => { for (const listener of [...resetListeners]) listener() }),
+  ], 'ui-rsi: connection reset dispatch')
   const activity = createActivitySource({
     read: () => ctx.remote.dualCoreRsi.activity(),
     intervalMs: refreshIntervalMs,
-    subscribeReset: listener => ctx.on('connection/reset', listener),
+    subscribeReset: (listener) => {
+      resetListeners.add(listener)
+      return () => { resetListeners.delete(listener) }
+    },
   })
   ctx.effect(() => () => { activity.dispose() }, 'ui-rsi: activity source')
   ctx.slots.inject('main', () => ctx.slots.register({

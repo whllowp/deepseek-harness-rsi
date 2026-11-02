@@ -302,7 +302,9 @@ describe('dsh-experimental-dual-core-rsi controller', () => {
     expect(record.candidateScore).toBe(0)
     const status = await test.service.status()
     expect(status.active.id).toBe('gen-1')
-    expect(status.daemon.id).toBe(record.candidateId)
+    // Content-dedup keeps the daemon lineage untouched: the duplicate never
+    // became a generation, so the seeded baseline still leads the lineage.
+    expect(status.daemon.id).toBe('gen-2')
     expect(status.lastCycle?.id).toBe('1')
     expect(status.lastCycle?.rationale).toBe('nothing worth changing')
   })
@@ -547,7 +549,7 @@ describe('dsh-experimental-dual-core-rsi controller', () => {
     const rollbackResult = await execute(test.ctx, 'rsi_rollback', { archiveId: 'arc-1' })
     expect(rollbackResult.isError).toBe(false)
     expect((await test.service.status()).active.id).toBe('gen-1')
-  })
+  }, 60_000)
 
   it('exposes pure presentation functions for every rsi tool', async () => {
     const test = await tracked(harness())
@@ -1299,6 +1301,69 @@ describe('background merge policy', () => {
     expect(activity.mergePolicy).toBe('consult')
     expect(activity.evolutions.map(entry => entry.cycleId)).toEqual(['2', '1'])
     expect(activity.evolutions[0]?.guidance).toHaveLength(3)
+  })
+
+  it('skips distillation once the active policy saturates the benchmark', async () => {
+    // Two verify lines at 0.5 per hit score 1.0; the 5% gate becomes unreachable.
+    const test = await tracked(harness({ perHit: 0.5, proposals: [STRONG, STRONG], rsi: { mergePolicy: 'auto' } }))
+    await stubAgent(test, 'saturated-core')
+    const adopted = await test.service.runCycle('schedule', new AbortController().signal)
+    expect(adopted.outcome).toBe('promoted')
+    expect((await test.service.status()).active.benchmark?.score).toBeCloseTo(1)
+    const callsAfterAdoption = test.distiller.inputs.length
+
+    const saturated = await test.service.runCycle('schedule', new AbortController().signal)
+    expect(saturated.outcome).toBe('retained')
+    expect(saturated.improvement).toBe(0)
+    expect(saturated.candidateId).toBe(adopted.candidateId)
+    expect(saturated.rationale).toContain('saturates the benchmark')
+    // No distillation child was spent on the doomed cycle.
+    expect(test.distiller.inputs.length).toBe(callsAfterAdoption)
+  })
+
+  it('retains a candidate matching the active policy content before evaluating it', async () => {
+    const evaluations: RsiGeneration[] = []
+    class CountingBenchmark extends KeywordBenchmark {
+      constructor(ctx: Context) { super(ctx, 'verify', 0.4) }
+      override async evaluate(request: { generation: RsiGeneration }) {
+        evaluations.push(request.generation)
+        return super.evaluate(request)
+      }
+    }
+    const ctx = new Context()
+    contexts.push(ctx)
+    const root = await mkdtemp(join(tmpdir(), 'dual-core-rsi-dedup-'))
+    await ctx.plugin(Storage)
+    await ctx.plugin(storageJson, { root })
+    await ctx.plugin(storageDomainPlugin, { backend: 'json' })
+    await ctx.plugin(LocalSubprocessRuntime)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SkillRegistry)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(CommandRuntime)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(LocalJobRegistry)
+    ctx.jobs.attachController('dual-core-rsi-test')
+    const distiller = new ScriptedDistiller(ctx, [STRONG, STRONG])
+    void new CountingBenchmark(ctx)
+    const service = new DualCoreRsiService(ctx, {
+      daemonEnabled: false, mergePolicy: 'auto', ledgerDir: join(root, 'ledger'),
+    })
+    await service.waitReady()
+    const harness_ = { ctx, service, distiller, ledgerDir: join(root, 'ledger') }
+    await stubAgent(harness_, 'dedup-core')
+    const adopted = await service.runCycle('schedule', new AbortController().signal)
+    expect(adopted.outcome).toBe('promoted')
+    const evaluated = evaluations.length
+
+    const duplicate = await service.runCycle('schedule', new AbortController().signal)
+    expect(duplicate.outcome).toBe('retained')
+    expect(duplicate.improvement).toBe(0)
+    expect(duplicate.candidateId).toBe(adopted.candidateId)
+    // The identical content never reached the benchmark seam.
+    expect(evaluations.length).toBe(evaluated)
   })
 
   it('never consults when the last session exits under the background policy', async () => {

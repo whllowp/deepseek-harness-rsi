@@ -6,14 +6,14 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionStore, SessionId } from '@deepseek-ai/dsh-session'
 import { SubagentRsiDistiller, RsiDistiller } from '../src/distiller.ts'
 import { FixtureRsiBenchmark, resolveFixtureCases } from '../src/benchmark.ts'
-import { decodeArtifacts, formatPercent, normalizeRationale, renderPolicySection } from '../src/policy.ts'
+import { artifactsEqual, decodeArtifacts, formatPercent, normalizeRationale, renderPolicySection } from '../src/policy.ts'
 import {
   renderCycleRecord, renderDeclineResult, renderExitSummary, renderGeneration, renderHistory,
   renderMergeResult, renderRollback, renderStatus,
 } from '../src/render.ts'
 import { assembleDigest, countUnseenSessions, rsiDigestProjectionDefinition, RSI_DIGEST_FOLD_TEXT_BUDGET } from '../src/digest.ts'
 import type {
-  RsiArtifactBudgets, RsiCycleRecord, RsiDistillInput, RsiGeneration, RsiPendingCandidate, RsiStatusView,
+  RsiArtifactBudgets, RsiArtifacts, RsiCycleRecord, RsiDistillInput, RsiGeneration, RsiPendingCandidate, RsiStatusView,
 } from '../src/types.ts'
 import { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId } from '../src/branding.ts'
 
@@ -479,6 +479,23 @@ describe('assembleDigest and freshness', () => {
     expect(countUnseenSessions(ctx, adoptedAt)).toBe(1)
     expect(countUnseenSessions(ctx, 0)).toBe(2)
     await ctx.fiber.dispose()
+  })
+})
+
+describe('artifactsEqual', () => {
+  const base = (over: Partial<RsiArtifacts>): RsiArtifacts => ({ guidance: ['verify edits'], skills: [{ name: 'verify-before-done', description: 'd', content: 'c' }], ...over })
+
+  it('accepts identical sets and rejects any field difference', () => {
+    expect(artifactsEqual(base({}), base({}))).toBe(true)
+    expect(artifactsEqual(base({}), base({ guidance: ['verify edits', 'verify again'] }))).toBe(false)
+    expect(artifactsEqual(base({}), base({ guidance: ['verify tests'] }))).toBe(false)
+    expect(artifactsEqual(base({}), base({ skills: [{ name: 'other', description: 'd', content: 'c' }] }))).toBe(false)
+    expect(artifactsEqual(base({}), base({ skills: [{ name: 'verify-before-done', description: 'e', content: 'c' }] }))).toBe(false)
+    expect(artifactsEqual(base({}), base({ skills: [{ name: 'verify-before-done', description: 'd', content: 'x' }] }))).toBe(false)
+    expect(artifactsEqual(base({}), base({ skills: [] }))).toBe(false)
+    expect(artifactsEqual(base({ guidance: [], skills: [] }), base({ guidance: [], skills: [] }))).toBe(true)
+    const same = base({})
+    expect(artifactsEqual(same, same)).toBe(true)
   })
 })
 

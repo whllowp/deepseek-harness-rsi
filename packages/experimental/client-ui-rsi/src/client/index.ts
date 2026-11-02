@@ -11,8 +11,9 @@ import type { RsiPanelKey } from './locales.ts'
 import { Config, DEFAULT_REFRESH_INTERVAL_MS, mountRsiPanel } from './mount.ts'
 
 export { Config, inject, RSI_PANEL_ID } from './mount.ts'
+export { createActivitySource } from './activity-source.ts'
 export type { RsiPanelInjected, RsiPanelProps } from './RsiPanel.tsx'
-export type { ActivitySnapshot, ActivitySource, ActivityStatus } from './activity-source.ts'
+export type { ActivitySnapshot, ActivitySource, ActivitySourceDeps, ActivityStatus } from './activity-source.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {

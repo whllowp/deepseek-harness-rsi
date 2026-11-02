@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/experimental/client-ui-zelda-pet/README.md
+/:
+  en: 84bd931b4f7eedc5
+  zh: 7dff0bc91f0ab7e5
+/deepseek-ai-dsh-experimental-client-ui-zelda-pet:
+  en: a25d958432f02924
+  zh: 1c157250790e9a4f
+/deepseek-ai-dsh-experimental-client-ui-zelda-pet/summary:
+  en: 7972ee56f1c2d11a
+  zh: 7e674de625077cab
+/deepseek-ai-dsh-experimental-client-ui-zelda-pet/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: ffab54373e9e61f0
+/deepseek-ai-dsh-experimental-client-ui-zelda-pet/use-this-package:
+  en: e9f14ad2c93e6ecf
+  zh: 7a56bb2d75487092
+/deepseek-ai-dsh-experimental-client-ui-zelda-pet/use-this-package/what-the-hero-shows:
+  en: 5519857d1d8c57bb
+  zh: 32ed8cef181f8e2d
+/deepseek-ai-dsh-experimental-client-ui-zelda-pet/use-this-package/config:
+  en: e3893114066fae33
+  zh: 58419fd39547983c
+/deepseek-ai-dsh-experimental-client-ui-zelda-pet/understand-the-implementation:
+  en: b733d573da97ee06
+  zh: dd8bcb3848b8e3cd
+/deepseek-ai-dsh-experimental-client-ui-zelda-pet/further-exploration:
+  en: 7844d33bf3ba778e
+  zh: 30dc42af370c5f6d
+/deepseek-ai-dsh-experimental-client-ui-zelda-pet/model-experience:
+  en: 346bbf46d73af662
+  zh: 548a6019c7d97604
+/deepseek-ai-dsh-experimental-client-ui-zelda-pet/model-experience/kv-cache-effect:
+  en: 47f982e326fe77fd
+  zh: 18cb8e4deb1aaa44
+/deepseek-ai-dsh-experimental-client-ui-zelda-pet/known-limitations-and-deferred-work:
+  en: 1a986e912174cdf4
+  zh: 8e30cccdb97e0681
+/deepseek-ai-dsh-experimental-client-ui-zelda-pet/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: 8ec3e73528ddb1a6

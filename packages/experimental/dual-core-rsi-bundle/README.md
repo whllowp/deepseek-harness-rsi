@@ -1,5 +1,5 @@
 ---
-description: "Dual-core RSI mode: a default-on daemon core distills the user core, adopts gate-passing candidates in the background, and shows every evolution and repair in a left-sidebar panel."
+description: "Dual-core RSI mode: a default-on daemon core distills the user core, adopts gate-passing candidates in the background, and shows every evolution and repair in a left-sidebar panel and a pixel-hero companion."
 kind: "package-bundle"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Add the experimental dual-core RSI mode to the harness as a switched-off optional layer. When enabled, a daemon core distills the user core's live sessions into bounded policy artifacts on its own schedule, benchmarks candidates, and past a 5% improvement threshold adopts the candidate in the background with no input, archiving the replaced surface and recording the change in a local git ledger; a left-sidebar panel lists every evolution and self-repair.
+Add the experimental dual-core RSI mode to the harness as a switched-off optional layer. When enabled, a daemon core distills the user core's live sessions into bounded policy artifacts on its own schedule, benchmarks candidates, and past a 5% improvement threshold adopts the candidate in the background with no input, archiving the replaced surface and recording the change in a local git ledger; a left-sidebar panel lists every evolution and self-repair, and a pixel-hero companion reacts to the same work from the corner of the window.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ Add the experimental dual-core RSI mode to the harness as a switched-off optiona
 
 In Web or Desktop, open Plugins and enable **Dual-core RSI** in Official. Switch it off to remove its profile layer.
 
-Enabling the bundle mounts the subagent distiller, a fixture benchmark, the dual-core RSI service with its tools and `/rsi` command in the running Host, and the Self-evolution sidebar panel in the Web client. The scheduled daemon cycles on fresh session activity and adopts qualifying candidates by itself — `/rsi run` only forces one immediately; the shipped fixture benchmark checks that the distilled policy carries verification guidance and stays inside the guidance budget, so it demonstrates the adoption gate rather than end-task quality.
+Enabling the bundle mounts the subagent distiller, a fixture benchmark, the dual-core RSI service with its tools and `/rsi` command in the running Host, the Self-evolution sidebar panel, and the pixel-hero companion in the Web client. The scheduled daemon cycles on fresh session activity and adopts qualifying candidates by itself — `/rsi run` only forces one immediately; the shipped fixture benchmark checks that the distilled policy carries verification guidance and stays inside the guidance budget, so it demonstrates the adoption gate rather than end-task quality.
 
 -----
 
@@ -37,7 +37,7 @@ Enabling the bundle mounts the subagent distiller, a fixture benchmark, the dual
 <details>
 <summary>Implementation details — click to expand</summary>
 
-[`cordis.patch.yml`](cordis.patch.yml) inserts the subagent distiller (`spawn` provider), the fixture benchmark with its default cases, the dual-core RSI service at the default 5% threshold, and the [Self-evolution panel](../client-ui-rsi/README.md) client row. Later profile patches can replace any row's configuration or disable it by row id; an override alone does not select the bundle. The [profile composer](../../boot/app-boot/README.md) owns patch ordering and errors.
+[`cordis.patch.yml`](cordis.patch.yml) inserts the subagent distiller (`spawn` provider), the fixture benchmark with its default cases, the dual-core RSI service at the default 5% threshold, the [Self-evolution panel](../client-ui-rsi/README.md) client row, and the [pixel-hero companion](../client-ui-zelda-pet/README.md) client row. Later profile patches can replace any row's configuration or disable it by row id; an override alone does not select the bundle. The [profile composer](../../boot/app-boot/README.md) owns patch ordering and errors.
 
 </details>
 
