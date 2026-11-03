@@ -99,6 +99,9 @@ function composeMission(input: RsiDistillInput): ContentBlock[] {
     `Current user-core generation ${input.active.id} (${input.active.origin}), guidance:\n${JSON.stringify(input.active.artifacts.guidance)}\nskills: ${JSON.stringify(input.active.artifacts.skills.map(skill => skill.name))}`,
     `Current daemon-core generation ${input.daemon.id} (${input.daemon.origin}), guidance:\n${JSON.stringify(input.daemon.artifacts.guidance)}\nskills: ${JSON.stringify(input.daemon.artifacts.skills.map(skill => skill.name))}`,
     `Digest of recent user-core sessions (assembled ${new Date(input.digest.assembledAt).toISOString()}):\n${JSON.stringify(input.digest.sessions)}`,
+    ...(input.knowledge.length === 0
+      ? []
+      : [`Long-term knowledge base accumulated across earlier cycles, oldest first — build on it, keep what still holds, and never re-propose a rejected direction without new session evidence:\n${input.knowledge.map(entry => `- [${entry.kind}] ${entry.text}`).join('\n')}`]),
   ]
   return [{ type: 'text', text: lines.join('\n\n') }]
 }

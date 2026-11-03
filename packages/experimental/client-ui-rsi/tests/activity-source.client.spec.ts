@@ -9,6 +9,7 @@ const VIEW: RsiActivityView = {
   cycleRunning: false,
   evolutions: [],
   repairs: [],
+  knowledge: [],
 }
 
 afterEach(() => { vi.useRealTimers() })

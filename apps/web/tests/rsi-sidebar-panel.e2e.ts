@@ -91,14 +91,14 @@ describe('web e2e: dual-core RSI Self-evolution sidebar panel', () => {
     await panel.getByText('Qualifying candidates merge in the background').waitFor({ timeout: 15_000 })
 
     await panel.getByRole('heading', { name: 'Evolutions' }).waitFor({ timeout: 15_000 })
-    await panel.getByText('verification habits repeated across sessions').waitFor()
-    await panel.getByText('verify each edit with focused tests before finishing').waitFor()
+    await panel.getByText('verification habits repeated across sessions', { exact: true }).waitFor()
+    await panel.getByText('verify each edit with focused tests before finishing', { exact: true }).waitFor()
     await panel.getByText('scheduled cycle').waitFor()
 
     await panel.getByRole('heading', { name: 'Repairs' }).waitFor()
-    await panel.getByText('distiller offline').waitFor()
+    await panel.getByText('distiller offline', { exact: true }).waitFor()
     await panel.getByText(/^retried after 200 ms$/u).waitFor()
-    await panel.getByText('attempt 1').waitFor()
+    await panel.getByText('attempt 1', { exact: true }).waitFor()
 
     // The pixel-hero companion reacts to the same background work: with the
     // distiller failing again, every scheduled round records a fresh repair

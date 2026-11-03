@@ -45,6 +45,10 @@ Under `mergePolicy: consult` only: when the last live session exits with an offe
 
 Every adoption — automatic or by merge — and every rollback materializes the adopted artifact set as plain files (`policy/guidance.md`, `policy/skills/*.md`, `policy/meta.json`) inside a dedicated git repository at `ledgerDir` (default `~/.dsh/dual-core-rsi-ledger`) and commits it. `git log` names each change point with its generation, score, and rationale; `git show` diffs any two adopted policies. The repository belongs to the daemon and never touches your project working tree. A missing `git` executable or a failing commit never undoes the durable swap: the archive still covers rollback, and the gap is reported in the merge result and logs.
 
+### Long-term knowledge base
+
+Every settled cycle deposits one-line lessons into a durable knowledge base inside the storage domain, so lessons outlive the policy generations that learned them: an adoption deposits an **insight** (the rationale with its scores), an evaluated gate rejection deposits a **rejection lesson** (what was proposed and why the current policy won), and every recorded self-repair deposits a **repair lesson** (what broke and how the daemon recovered). Human merges and declines under `consult` deposit the same lessons from the decision side. Exact (kind, text) duplicates are never deposited twice, and the oldest entries are evicted past `knowledgeMaxEntries`. Every later distillation reads the newest `knowledgePromptLines` entries — oldest first, with the instruction to build on them and never re-propose a rejected direction without new session evidence — so the daemon compounds knowledge instead of relearning it. `/rsi knowledge` lists the newest entries, the sidebar panel carries a Knowledge section, and the git ledger still records every adopted policy.
+
 ### Knowing when the policy went stale
 
 `/rsi` and `rsi_status` show the knowledge cutoff (`Knowledge current as of: …`) and count live sessions with activity newer than that cutoff. When that count is nonzero the status says the activity is not in the current policy yet; the scheduled daemon folds it into its next tick, and `/rsi run` refreshes it immediately, so an aging policy is refreshed on evidence instead of drifting silently.
@@ -72,6 +76,8 @@ Every adoption — automatic or by merge — and every rollback materializes the
 | `cycleTimeoutMs` | `600000` | Timebox for one scheduled daemon cycle attempt. |
 | `consultTimeoutMs` | `300000` | How long the exit merge consult waits for the answer. |
 | `ledgerDir` | `~/.dsh/dual-core-rsi-ledger` | Directory of the local git ledger recording merges and rollbacks. |
+| `knowledgeMaxEntries` | `200` | Maximum knowledge entries retained in the long-term knowledge base (oldest evicted). |
+| `knowledgePromptLines` | `40` | Maximum knowledge lines handed to one distillation, newest kept. |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-experimental-dual-core-rsi) is the exhaustive source for every accepted field. A distiller proposal that violates any budget fails its cycle instead of being truncated.
 

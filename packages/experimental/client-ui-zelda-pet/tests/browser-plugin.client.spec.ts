@@ -13,7 +13,7 @@ import { apply as applyNode } from '../src/index.ts'
 
 const Empty = () => null
 
-const READY = { ok: true, value: { daemonEnabled: true, mergePolicy: 'auto', cycleRunning: false, evolutions: [], repairs: [] } }
+const READY = { ok: true, value: { daemonEnabled: true, mergePolicy: 'auto', cycleRunning: false, evolutions: [], repairs: [], knowledge: [] } }
 
 afterEach(() => { vi.useRealTimers() })
 

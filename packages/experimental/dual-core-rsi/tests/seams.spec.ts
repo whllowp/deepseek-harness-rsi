@@ -9,13 +9,14 @@ import { FixtureRsiBenchmark, resolveFixtureCases } from '../src/benchmark.ts'
 import { artifactsEqual, decodeArtifacts, formatPercent, normalizeRationale, renderPolicySection } from '../src/policy.ts'
 import {
   renderCycleRecord, renderDeclineResult, renderExitSummary, renderGeneration, renderHistory,
-  renderMergeResult, renderRollback, renderStatus,
+  renderKnowledge, renderMergeResult, renderRollback, renderStatus,
 } from '../src/render.ts'
 import { assembleDigest, countUnseenSessions, rsiDigestProjectionDefinition, RSI_DIGEST_FOLD_TEXT_BUDGET } from '../src/digest.ts'
 import type {
-  RsiArtifactBudgets, RsiArtifacts, RsiCycleRecord, RsiDistillInput, RsiGeneration, RsiPendingCandidate, RsiStatusView,
+  RsiArtifactBudgets, RsiArtifacts, RsiCycleRecord, RsiDistillInput, RsiGeneration, RsiKnowledgeEntry,
+  RsiPendingCandidate, RsiStatusView,
 } from '../src/types.ts'
-import { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId } from '../src/branding.ts'
+import { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId, RsiKnowledgeId } from '../src/branding.ts'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -198,6 +199,8 @@ class StubSubagents extends Service {
   settled: StubStructured = { stopReason: 'completed', structured: undefined }
   readonly disposed: string[] = []
   provider: StubProvider | undefined
+  /** The most recent activation spec the distiller handed over. */
+  lastSpec: unknown
 
   constructor(ctx: Context) {
     super(ctx, 'subagents')
@@ -207,7 +210,8 @@ class StubSubagents extends Service {
     return this.provider
   }
 
-  startActivation(_spec: unknown): Promise<StubActivation> {
+  startActivation(spec: unknown): Promise<StubActivation> {
+    this.lastSpec = spec
     return Promise.resolve(stubActivation(this.settled, this.disposed))
   }
 }
@@ -234,7 +238,17 @@ const DISTILL_INPUT: RsiDistillInput = {
     },
   },
   digest: { assembledAt: 0, sessions: [{ sessionId: 's1', eventCount: 3, eventCounts: [], texts: ['verify the migration'] }] },
+  knowledge: [],
   budgets: BUDGETS,
+}
+
+/** The distill input with accumulated knowledge for mission-composition asserts. */
+const DISTILL_INPUT_KNOWLEDGE: RsiDistillInput = {
+  ...DISTILL_INPUT,
+  knowledge: [
+    { id: RsiKnowledgeId('kn-1'), kind: 'insight', text: 'adopted verify habits', sourceCycleId: RsiCycleId('1'), depositedAt: 1 },
+    { id: RsiKnowledgeId('kn-2'), kind: 'rejection', text: 'dropping verification scored worse', sourceCycleId: RsiCycleId('2'), depositedAt: 2 },
+  ],
 }
 
 function freshProvider(): StubProvider {
@@ -296,6 +310,26 @@ describe('subagent distiller', () => {
     expect(output.artifacts.guidance).toEqual(['run focused tests'])
     expect(output.artifacts.skills[0]!.name).toBe('commit-check')
     expect(subagents.disposed).toEqual(['dispose'])
+    await ctx.fiber.dispose()
+  })
+
+  it('carries the accumulated knowledge base into the mission prompt', async () => {
+    const { ctx, subagents, distiller } = await distillerHarness()
+    subagents.settled = {
+      stopReason: 'completed',
+      structured: { rationale: 'keep refining', guidance: [], skills: [] },
+    }
+    await distiller.distill(DISTILL_INPUT_KNOWLEDGE, { parent: undefined as never, signal: new AbortController().signal })
+    const spec = subagents.lastSpec as { request: { prompt: { type: string; text: string }[] } }
+    const prompt = spec.request.prompt[0]!
+    expect(prompt.text).toContain('Long-term knowledge base accumulated across earlier cycles')
+    expect(prompt.text).toContain('- [insight] adopted verify habits')
+    expect(prompt.text).toContain('- [rejection] dropping verification scored worse')
+    // The empty-knowledge input renders no knowledge section at all.
+    await distiller.distill(DISTILL_INPUT, { parent: undefined as never, signal: new AbortController().signal })
+    const bareSpec = subagents.lastSpec as { request: { prompt: { type: string; text: string }[] } }
+    const bare = bareSpec.request.prompt[0]!
+    expect(bare.text).not.toContain('Long-term knowledge base')
     await ctx.fiber.dispose()
   })
 
@@ -479,6 +513,26 @@ describe('assembleDigest and freshness', () => {
     expect(countUnseenSessions(ctx, adoptedAt)).toBe(1)
     expect(countUnseenSessions(ctx, 0)).toBe(2)
     await ctx.fiber.dispose()
+  })
+})
+
+describe('renderKnowledge', () => {
+  const entry = (id: string, kind: 'insight' | 'rejection' | 'repair-lesson', text: string): RsiKnowledgeEntry =>
+    ({ id: RsiKnowledgeId(id), kind, text, sourceCycleId: RsiCycleId('1'), depositedAt: 1 })
+
+  it('renders every kind and the empty base', () => {
+    expect(renderKnowledge([], 20)).toBe('No accumulated knowledge yet. Cycles deposit insights, rejection lessons, and repair lessons here.')
+    const rendered = renderKnowledge([
+      entry('kn-3', 'repair-lesson', 'recovered from "offline" (retried)'),
+      entry('kn-2', 'rejection', 'kept the current policy'),
+      entry('kn-1', 'insight', 'adopted verify habits'),
+    ], 20)
+    expect(rendered).toContain('Dual-core RSI long-term knowledge (newest first):')
+    expect(rendered).toContain('kn-3 [repair lesson] recovered from "offline" (retried)')
+    expect(rendered).toContain('kn-2 [rejection lesson] kept the current policy')
+    expect(rendered).toContain('kn-1 [insight] adopted verify habits')
+    // The limit bounds the listing.
+    expect(renderKnowledge([entry('kn-1', 'insight', 'a'), entry('kn-2', 'insight', 'b')], 1)).not.toContain('kn-2')
   })
 })
 

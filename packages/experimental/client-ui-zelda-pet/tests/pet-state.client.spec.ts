@@ -11,7 +11,7 @@ const format = {
 }
 
 function view(over: Partial<RsiActivityView>): RsiActivityView {
-  return { daemonEnabled: true, mergePolicy: 'auto', cycleRunning: false, evolutions: [], repairs: [], ...over }
+  return { daemonEnabled: true, mergePolicy: 'auto', cycleRunning: false, evolutions: [], repairs: [], knowledge: [], ...over }
 }
 
 function ready(value: RsiActivityView): ActivitySnapshot {

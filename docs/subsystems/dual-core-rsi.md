@@ -155,6 +155,30 @@ interface RsiEvolutionEntry {
 }
 ```
 
+## Long-term knowledge base
+
+Each settled cycle and each recorded self-repair deposits one-line lessons into a durable knowledge table; every later distillation reads the newest entries so lessons outlive the policy generations that learned them.
+
+```ts type-equiv
+/**
+ * One entry of the daemon's long-term knowledge base: a single normalized
+ * line deposited when a cycle settles or a self-repair recovers, recalled by
+ * every later distillation so lessons outlive the policy generations that
+ * learned them. Exact duplicates are never deposited twice.
+ */
+interface RsiKnowledgeEntry {
+  readonly id: RsiKnowledgeId
+  readonly kind: RsiKnowledgeKind
+  /** One normalized knowledge line, bounded at deposit time. */
+  readonly text: string
+  /** Cycle whose settlement deposited the entry; absent for repair lessons, which incidents deposit between cycles. */
+  readonly sourceCycleId?: RsiCycleId | undefined
+  /** Safe-integer epoch milliseconds at deposit. */
+  readonly depositedAt: number
+}
+```
+
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -228,7 +252,7 @@ async status(): Promise<RsiStatusView>
  * @param limit - maximum entries of each kind (default 20).
  * @returns bounded history.
  */
-async history(limit: number = 20): Promise<{ cycles: RsiCycleRecord[]; archives: RsiArchiveEntry[]; incidents: RsiIncidentRecord[] }>
+async history(limit: number = 20): Promise<{ cycles: RsiCycleRecord[] archives: RsiArchiveEntry[] incidents: RsiIncidentRecord[] knowledge: RsiKnowledgeEntry[] }>
 
 /**
  * Read the daemon's recent background evolutions and self-repairs for

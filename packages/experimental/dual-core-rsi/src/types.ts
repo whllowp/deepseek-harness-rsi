@@ -4,9 +4,9 @@
  * @module @deepseek-ai/dsh-experimental-dual-core-rsi/types
  */
 
-import type { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId } from './branding.ts'
+import type { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId, RsiKnowledgeId } from './branding.ts'
 
-export type { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId }
+export type { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId, RsiKnowledgeId }
 
 /**
  * How one generation's artifacts came to exist. `initial` generations are
@@ -95,6 +95,26 @@ export type RsiCycleOutcome = 'promoted' | 'retained' | 'pending'
 
 /** How a human settled one pending candidate. */
 export type RsiMergeDecision = 'merged' | 'declined'
+
+/** What one accumulated knowledge entry teaches the next distillation. */
+export type RsiKnowledgeKind = 'insight' | 'rejection' | 'repair-lesson'
+
+/**
+ * One entry of the daemon's long-term knowledge base: a single normalized
+ * line deposited when a cycle settles or a self-repair recovers, recalled by
+ * every later distillation so lessons outlive the policy generations that
+ * learned them. Exact duplicates are never deposited twice.
+ */
+export interface RsiKnowledgeEntry {
+  readonly id: RsiKnowledgeId
+  readonly kind: RsiKnowledgeKind
+  /** One normalized knowledge line, bounded at deposit time. */
+  readonly text: string
+  /** Cycle whose settlement deposited the entry; absent for repair lessons, which incidents deposit between cycles. */
+  readonly sourceCycleId?: RsiCycleId | undefined
+  /** Safe-integer epoch milliseconds at deposit. */
+  readonly depositedAt: number
+}
 
 /** Durable record of one completed daemon distillation cycle. */
 export interface RsiCycleRecord {
@@ -205,6 +225,8 @@ export interface RsiDistillInput {
   /** Current daemon-core generation the candidate improves on. */
   readonly daemon: RsiGeneration
   readonly digest: RsiSessionDigest
+  /** Long-term knowledge base, oldest entry first, bounded by configuration. */
+  readonly knowledge: readonly RsiKnowledgeEntry[]
   readonly budgets: RsiArtifactBudgets
 }
 
@@ -266,6 +288,8 @@ export interface RsiActivityView {
   readonly evolutions: readonly RsiEvolutionEntry[]
   /** Newest recorded self-repairs first (bounded). */
   readonly repairs: readonly RsiIncidentRecord[]
+  /** Newest accumulated knowledge entries first (bounded). */
+  readonly knowledge: readonly RsiKnowledgeEntry[]
 }
 
 /** Read-side projection of the whole dual-core state for tools and command. */

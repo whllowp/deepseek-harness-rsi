@@ -18,6 +18,9 @@ export type RsiCycleId = Branded<'rsi-cycle'>
 /** Identity of one recorded daemon self-repair incident. */
 export type RsiIncidentId = Branded<'rsi-incident'>
 
+/** Identity of one accumulated long-term knowledge entry. */
+export type RsiKnowledgeId = Branded<'rsi-knowledge'>
+
 /**
  * Brand a string as an {@link RsiGenerationId}.
  * @param id - the raw generation id string.
@@ -52,4 +55,13 @@ export function RsiCycleId(id: string): RsiCycleId {
  */
 export function RsiIncidentId(id: string): RsiIncidentId {
   return brandString<RsiIncidentId>(id)
+}
+
+/**
+ * Brand a string as an {@link RsiKnowledgeId}.
+ * @param id - the raw knowledge id string.
+ * @returns the same string with the knowledge-id brand.
+ */
+export function RsiKnowledgeId(id: string): RsiKnowledgeId {
+  return brandString<RsiKnowledgeId>(id)
 }

@@ -63,8 +63,12 @@ type ScriptedProposal = RsiDistillOutput | Promise<RsiDistillOutput> | Error | R
 class ScriptedDistiller extends RsiDistiller {
   readonly inputs: RsiDistillInput[] = []
 
-  constructor(ctx: Context, private queue: ScriptedProposal[]) {
+  private queue: ScriptedProposal[]
+
+  constructor(ctx: Context, proposals: ScriptedProposal[]) {
     super(ctx)
+    // Clone: distill() consumes the queue, and callers reuse their proposal arrays.
+    this.queue = [...proposals]
   }
 
   distill(input: RsiDistillInput): Promise<RsiDistillOutput> {
@@ -616,6 +620,11 @@ describe('dsh-experimental-dual-core-rsi controller', () => {
     expect(merged.text).toContain("Merged gen-3 into your agent's working policy via /rsi merge")
     expect(merged.text).toContain('git ledger recorded commit')
 
+    const knowledge = await runCommand(test, agent, 'knowledge', signal)
+    expect(knowledge.kind).toBe('success')
+    expect(knowledge.text).toContain('Dual-core RSI long-term knowledge')
+    expect(knowledge.text).toContain('adopted by the user: two verify habits repeated across sessions')
+
     const declineAfterMerge = await runCommand(test, agent, 'decline', signal)
     expect(declineAfterMerge.kind).toBe('error')
     expect(declineAfterMerge.text).toContain('no dual-core RSI candidate is waiting')
@@ -1066,6 +1075,13 @@ describe('scheduled daemon', () => {
     expect(status.incidents[0]?.recovery).toBe('retried')
     expect(status.incidents[0]?.detail).toContain('still offline')
     expect(status.incidents[1]?.attempt).toBe(1)
+    // Each incident also deposited a long-term repair lesson.
+    const lessons = (await test.service.activity()).knowledge.filter(entry => entry.kind === 'repair-lesson')
+    // activity() lists knowledge newest first.
+    expect(lessons.map(entry => entry.text)).toEqual([
+      'recovered from "still offline" (retried)',
+      'recovered from "distiller offline" (retried)',
+    ].reverse())
     const history = await test.service.history()
     expect(history.incidents.map(incident => incident.id)).toEqual(['inc-2', 'inc-1'])
   })
@@ -1301,6 +1317,76 @@ describe('background merge policy', () => {
     expect(activity.mergePolicy).toBe('consult')
     expect(activity.evolutions.map(entry => entry.cycleId)).toEqual(['2', '1'])
     expect(activity.evolutions[0]?.guidance).toHaveLength(3)
+  })
+
+  it('accumulates long-term knowledge across cycles with dedup, eviction, and distiller recall', async () => {
+    const test = await tracked(harness({
+      // The adoption lands at 0.5 (not saturated), so the weaker candidate
+      // reaches the evaluated path and deposits a genuine rejection; its
+      // repeats then exercise the content-dedup skip and lesson dedup.
+      perHit: 0.25,
+      proposals: [
+        STRONG,
+        { rationale: 'drop verification entirely', artifacts: { guidance: ['move fast'], skills: [] } },
+        { rationale: 'drop verification entirely', artifacts: { guidance: ['move fast'], skills: [] } },
+        { rationale: 'drop verification entirely', artifacts: { guidance: ['move fast'], skills: [] } },
+      ],
+      rsi: { mergePolicy: 'auto', knowledgeMaxEntries: 3, knowledgePromptLines: 2 },
+    }))
+    const core = await stubAgent(test, 'knowledge-core')
+    await test.service.runCycle('schedule', new AbortController().signal)
+    const first = await test.service.runCycle('schedule', new AbortController().signal)
+    expect(first.outcome).toBe('retained')
+    const knowledge = async () => (await test.service.activity()).knowledge
+
+    // The adoption deposited an insight; the failed gate deposited a rejection lesson.
+    const afterTwo = await knowledge()
+    expect(afterTwo.some(entry => entry.kind === 'insight' && entry.text.includes('adopted: two verify habits'))).toBe(true)
+    expect(afterTwo.some(entry => entry.kind === 'rejection' && entry.text.includes('kept the current policy over'))).toBe(true)
+
+    // The identical proposal (content-equal, dedup skip) settles retained without depositing.
+    await test.service.runCycle('schedule', new AbortController().signal)
+    expect((await knowledge()).length).toBe(afterTwo.length)
+
+    // A repeated identical rejection is deduplicated by exact (kind, text).
+    await test.service.runCycle('schedule', new AbortController().signal)
+    const afterRepeat = await knowledge()
+    expect(afterRepeat.filter(entry => entry.kind === 'rejection').length).toBe(1)
+
+    // The distiller's next input carries the knowledge base, oldest first, bounded to the prompt lines.
+    const inputs = test.distiller.inputs
+    const last = inputs.at(-1)!
+    expect(last.knowledge.length).toBeLessThanOrEqual(2)
+    expect(last.knowledge[0]?.depositedAt).toBeLessThanOrEqual(last.knowledge.at(-1)!.depositedAt)
+
+    // Knowledge is durable: disposing the tracked agent and re-reading keeps every entry.
+    core.registration()
+    await core.scopeHandle.dispose()
+    const activity = await test.service.activity()
+    expect(activity.knowledge.length).toBeGreaterThan(0)
+  })
+
+  it('evicts the oldest knowledge entries past the configured cap', async () => {
+    // Four distinct rejected rationales deposit four distinct lessons under a cap of 2.
+    const rejects = ['try a', 'try b', 'try c', 'try d'].map(label => ({
+      rationale: label,
+      artifacts: { guidance: [`verify ${label}`], skills: [] },
+    })) as RsiDistillOutput[]
+    const test = await tracked(harness({
+      proposals: rejects,
+      rsi: { mergePolicy: 'auto', knowledgeMaxEntries: 2 },
+    }))
+    await stubAgent(test, 'eviction-core')
+    for (const reject of rejects) {
+      void reject
+      await test.service.runCycle('schedule', new AbortController().signal)
+    }
+    const knowledge = (await test.service.activity()).knowledge
+    expect(knowledge.length).toBe(2)
+    expect(knowledge.map(entry => entry.text)).toEqual([
+      'kept the current policy over: try c (candidate scored 0.400 against 0.400)',
+      'kept the current policy over: try d (candidate scored 0.400 against 0.400)',
+    ])
   })
 
   it('skips distillation once the active policy saturates the benchmark', async () => {

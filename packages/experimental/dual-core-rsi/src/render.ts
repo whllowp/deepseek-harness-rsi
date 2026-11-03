@@ -10,7 +10,8 @@ import { formatPercent } from './policy.ts'
 import type { RsiMergeResult, RsiDeclineResult } from './index.ts'
 import type { RsiLedgerOutcome } from './ledger.ts'
 import type {
-  RsiArchiveEntry, RsiCycleRecord, RsiGeneration, RsiIncidentRecord, RsiPendingCandidate, RsiStatusView,
+  RsiArchiveEntry, RsiCycleRecord, RsiGeneration, RsiIncidentRecord, RsiKnowledgeEntry,
+  RsiPendingCandidate, RsiStatusView,
 } from './types.ts'
 
 const TRUNCATION_NOTICE = '…'
@@ -227,6 +228,25 @@ export function renderMergeResult(result: RsiMergeResult): string {
 export function renderDeclineResult(result: RsiDeclineResult): string {
   const via = result.source === 'consult' ? 'the exit consult' : '/rsi decline'
   return `Kept the current policy via ${via}; the pending candidate from cycle ${result.cycle.id} was declined and nothing changed. The daemon keeps distilling from its own lineage.`
+}
+
+/**
+ * Multi-line listing of accumulated long-term knowledge, newest first.
+ * @param knowledge - knowledge entries, newest first.
+ * @param limit - maximum entries to list.
+ * @returns the rendered knowledge text.
+ */
+export function renderKnowledge(knowledge: readonly RsiKnowledgeEntry[], limit: number): string {
+  if (knowledge.length === 0) return 'No accumulated knowledge yet. Cycles deposit insights, rejection lessons, and repair lessons here.'
+  const label = (kind: RsiKnowledgeEntry['kind']): string => kind === 'insight'
+    ? 'insight'
+    : kind === 'rejection'
+      ? 'rejection lesson'
+      : 'repair lesson'
+  return [
+    'Dual-core RSI long-term knowledge (newest first):',
+    ...knowledge.slice(0, limit).map(entry => `${entry.id} [${label(entry.kind)}] ${bound(entry.text, 200)}`),
+  ].join('\n')
 }
 
 /**

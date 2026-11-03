@@ -37,7 +37,7 @@ function mount(source: ActivitySource) {
   return { view: render(<ZeldaPet {...props} />), openSelfEvolution }
 }
 
-const IDLE_VIEW = { daemonEnabled: true, mergePolicy: 'auto' as const, cycleRunning: false, evolutions: [], repairs: [] }
+const IDLE_VIEW = { daemonEnabled: true, mergePolicy: 'auto' as const, cycleRunning: false, evolutions: [], repairs: [], knowledge: [] }
 
 describe('ZeldaPet', () => {
   it('walks idle with the empty hint while nothing happened', () => {

@@ -7,10 +7,10 @@
 
 import { z } from 'zod'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
-import { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId } from './branding.ts'
+import { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId, RsiKnowledgeId } from './branding.ts'
 import type {
   RsiArchiveEntry, RsiBenchmarkCaseResult, RsiBenchmarkReport, RsiCycleRecord,
-  RsiGeneration, RsiIncidentRecord, RsiSkillArtifact,
+  RsiGeneration, RsiIncidentRecord, RsiKnowledgeEntry, RsiSkillArtifact,
 } from './types.ts'
 
 const instantSchema = z.number().int().nonnegative()
@@ -84,6 +84,14 @@ const incidentSchema = z.object({
   retryAfterMs: z.number().int().nonnegative(),
 }).strict()
 
+const knowledgeSchema = z.object({
+  id: z.string().min(1).transform(RsiKnowledgeId),
+  kind: z.enum(['insight', 'rejection', 'repair-lesson']),
+  text: z.string().min(1),
+  sourceCycleId: z.string().min(1).transform(RsiCycleId).optional(),
+  depositedAt: instantSchema,
+}).strict()
+
 const stateSchema = z.object({
   activeId: z.string().min(1).transform(RsiGenerationId),
   daemonId: z.string().min(1).transform(RsiGenerationId),
@@ -98,6 +106,8 @@ const stateSchema = z.object({
   lastDecisionAt: z.number().int().nonnegative().optional(),
   /** Monotonic incident id counter; absent in pre-incident records and read as zero. */
   incidentCounter: z.number().int().nonnegative().optional(),
+  /** Monotonic knowledge id counter; absent in pre-knowledge records and read as zero. */
+  knowledgeCounter: z.number().int().nonnegative().optional(),
 }).strict()
 
 /**
@@ -120,6 +130,7 @@ export const dualCoreRsiDomain = defineDomain({
     archives: domainTable<RsiArchiveId, RsiArchiveEntry>(archiveSchema),
     cycles: domainTable<RsiCycleId, RsiCycleRecord>(cycleSchema),
     incidents: domainTable<RsiIncidentId, RsiIncidentRecord>(incidentSchema),
+    knowledge: domainTable<RsiKnowledgeId, RsiKnowledgeEntry>(knowledgeSchema),
   },
 })
 

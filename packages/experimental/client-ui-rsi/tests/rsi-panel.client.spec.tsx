@@ -30,6 +30,10 @@ const POPULATED: RsiActivityView = {
   daemonEnabled: true,
   mergePolicy: 'auto',
   cycleRunning: false,
+  knowledge: [
+    { id: 'kn-2' as never, kind: 'rejection', text: 'kept the current policy over: drop the verify habit (candidate scored 0.000 against 0.600)', sourceCycleId: '2' as never, depositedAt: 1_700_000_200_000 },
+    { id: 'kn-1' as never, kind: 'insight', text: 'adopted: verification habits repeated across sessions', sourceCycleId: '1' as never, depositedAt: 1_700_000_000_000 },
+  ],
   evolutions: [
     {
       cycleId: '2' as never,
@@ -95,7 +99,7 @@ describe('RsiPanel', () => {
   })
 
   it('renders the empty state with the manual-only consult policy line', () => {
-    mount({ status: 'ready', view: { daemonEnabled: false, mergePolicy: 'consult', cycleRunning: false, evolutions: [], repairs: [] }, error: null })
+    mount({ status: 'ready', view: { daemonEnabled: false, mergePolicy: 'consult', cycleRunning: false, evolutions: [], repairs: [], knowledge: [] }, error: null })
     expect(screen.getByText(/Daemon core disabled/)).toBeTruthy()
     expect(screen.getByText(/Qualifying candidates wait for your merge/)).toBeTruthy()
     expect(screen.getByText(/No background activity yet/)).toBeTruthy()
@@ -122,6 +126,11 @@ describe('RsiPanel', () => {
     expect(screen.getByText('deferred 600000 ms to the next interval')).toBeTruthy()
     expect(screen.getByText('retried after 30000 ms')).toBeTruthy()
     expect(screen.getByText('distiller offline')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Knowledge' })).toBeTruthy()
+    expect(screen.getByText('Rejection lesson')).toBeTruthy()
+    expect(screen.getByText('Insight')).toBeTruthy()
+    expect(screen.getByText(/kept the current policy over: drop the verify habit/)).toBeTruthy()
+    expect(screen.getByText('adopted: verification habits repeated across sessions')).toBeTruthy()
   })
 
   it('renders only the populated section when one list is empty', () => {
@@ -132,6 +141,9 @@ describe('RsiPanel', () => {
     mount({ status: 'ready', view: { ...POPULATED, evolutions: [] }, error: null }, zh)
     expect(screen.queryByRole('heading', { name: '进化' })).toBeNull()
     expect(screen.getByRole('heading', { name: '修复' })).toBeTruthy()
+    cleanup()
+    mount({ status: 'ready', view: { ...POPULATED, knowledge: [] }, error: null }, zh)
+    expect(screen.queryByRole('heading', { name: '知识库' })).toBeNull()
   })
 
   it('renders the decorative sparkle icon at the requested size', () => {

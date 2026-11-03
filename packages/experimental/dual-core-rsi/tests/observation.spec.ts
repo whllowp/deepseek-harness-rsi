@@ -228,6 +228,16 @@ describe('self-evolution observation', () => {
     expect(Math.max(...durations)).toBeLessThan(2_000)
     expect(wallMs).toBeLessThan(4_000)
 
+    // Long-term knowledge accumulated across the ramp: the two adoptions
+    // deposited insights, the two failures deposited repair lessons, and the
+    // regression/duplicate cycles deposited nothing (skips) or one rejection
+    // lesson (the evaluated regression).
+    const knowledge = (await service.activity()).knowledge
+    const kinds = knowledge.map(entry => entry.kind)
+    expect(kinds.filter(kind => kind === 'insight').length).toBeGreaterThanOrEqual(2)
+    expect(kinds.filter(kind => kind === 'repair-lesson').length).toBeGreaterThanOrEqual(2)
+    console.log('RSI observation — knowledge:', JSON.stringify(knowledge.map(entry => [entry.kind, entry.text.slice(0, 50)])))
+
     // The adopted content reached the agent surface and the ledger.
     const active: RsiGeneration = (await service.status()).active
     expect(active.artifacts.guidance).toEqual(SATURATED.artifacts.guidance)

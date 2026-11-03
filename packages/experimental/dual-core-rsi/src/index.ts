@@ -26,18 +26,18 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { assembleDigest, countUnseenSessions, rsiDigestProjectionDefinition } from './digest.ts'
 import { dualCoreRsiDomain, RSI_STATE_KEY } from './domain.ts'
 import type { RsiStateRecord } from './domain.ts'
-import { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId } from './branding.ts'
+import { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId, RsiKnowledgeId } from './branding.ts'
 import { RsiLedger } from './ledger.ts'
 import type { RsiLedgerOutcome } from './ledger.ts'
 import { applyArtifacts, artifactsEqual } from './policy.ts'
 import {
   RSI_CYCLE_COST_NOTE, renderCycleRecord, renderDeclineResult, renderExitSummary, renderHistory,
-  renderMergeResult, renderRollback, renderStatus,
+  renderKnowledge, renderMergeResult, renderRollback, renderStatus,
 } from './render.ts'
 import type {
   RsiActivityView, RsiArchiveEntry, RsiArtifactBudgets, RsiCycleRecord, RsiCycleTrigger,
-  RsiEvolutionEntry, RsiGeneration, RsiIncidentRecord, RsiMergeDecision, RsiMergePolicy,
-  RsiPendingCandidate, RsiStatusView,
+  RsiEvolutionEntry, RsiGeneration, RsiIncidentRecord, RsiKnowledgeEntry, RsiKnowledgeKind,
+  RsiMergeDecision, RsiMergePolicy, RsiPendingCandidate, RsiStatusView,
 } from './types.ts'
 
 export type {
@@ -45,11 +45,11 @@ export type {
   RsiBenchmarkCaseResult, RsiBenchmarkReport, RsiBenchmarkRequest, RsiCycleOutcome,
   RsiCycleRecord, RsiCycleTrigger, RsiDistillInput, RsiDistillOutput,
   RsiEvolutionEntry, RsiGeneration, RsiGenerationOrigin, RsiIncidentKind,
-  RsiIncidentRecord, RsiIncidentRecovery, RsiMergeDecision, RsiMergePolicy,
-  RsiPendingCandidate, RsiSessionDigest, RsiSessionDigestEntry, RsiSkillArtifact,
-  RsiStatusView,
+  RsiIncidentRecord, RsiIncidentRecovery, RsiKnowledgeEntry, RsiKnowledgeKind,
+  RsiMergeDecision, RsiMergePolicy, RsiPendingCandidate, RsiSessionDigest,
+  RsiSessionDigestEntry, RsiSkillArtifact, RsiStatusView,
 } from './types.ts'
-export { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId } from './branding.ts'
+export { RsiArchiveId, RsiCycleId, RsiGenerationId, RsiIncidentId, RsiKnowledgeId } from './branding.ts'
 export { decodeArtifacts, renderPolicySection, applyArtifacts, formatPercent } from './policy.ts'
 export { assembleDigest } from './digest.ts'
 export { dualCoreRsiDomain, RSI_STATE_KEY } from './domain.ts'
@@ -131,6 +131,10 @@ export interface Config {
   consultTimeoutMs?: number
   /** Directory of the local git ledger recording merged and rolled-back policies (default `~/.dsh/dual-core-rsi-ledger`). */
   ledgerDir?: string
+  /** Maximum knowledge entries retained in the long-term knowledge base (default 200). */
+  knowledgeMaxEntries?: number
+  /** Maximum knowledge lines handed to one distillation (default 40, newest kept). */
+  knowledgePromptLines?: number
 }
 
 /** Default swap threshold when configuration omits it. */
@@ -160,6 +164,15 @@ export const DEFAULT_CONSULT_TIMEOUT_MS = 300_000
 /** Ledger directory name under the harness home. */
 export const DEFAULT_LEDGER_DIR_NAME = 'dual-core-rsi-ledger'
 
+/** Default retained entries in the long-term knowledge base. */
+export const DEFAULT_KNOWLEDGE_MAX_ENTRIES = 200
+
+/** Default knowledge lines handed to one distillation. */
+export const DEFAULT_KNOWLEDGE_PROMPT_LINES = 40
+
+/** Bound on one deposited knowledge line; entries stay one line. */
+const KNOWLEDGE_TEXT_MAX_CHARS = 240
+
 /** Schemastery configuration. */
 export const Config: z<Config> = z.object({
   threshold: z.number().min(0).max(1).default(0.05),
@@ -181,6 +194,8 @@ export const Config: z<Config> = z.object({
   cycleTimeoutMs: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_CYCLE_TIMEOUT_MS),
   consultTimeoutMs: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_CONSULT_TIMEOUT_MS),
   ledgerDir: z.string().default(dshHomePath(DEFAULT_LEDGER_DIR_NAME)),
+  knowledgeMaxEntries: z.number().step(1).min(1).max(10_000).default(DEFAULT_KNOWLEDGE_MAX_ENTRIES),
+  knowledgePromptLines: z.number().step(1).min(1).max(200).default(DEFAULT_KNOWLEDGE_PROMPT_LINES),
 })
 
 /** Fully resolved configuration after defaulting and validation. */
@@ -198,6 +213,8 @@ export interface ResolvedConfig extends RsiArtifactBudgets {
   readonly cycleTimeoutMs: number
   readonly consultTimeoutMs: number
   readonly ledgerDir: string
+  readonly knowledgeMaxEntries: number
+  readonly knowledgePromptLines: number
 }
 
 function positiveSafeInteger(value: number | undefined, fallback: number, label: string): number {
@@ -255,10 +272,12 @@ export function resolveConfig(config: Config): ResolvedConfig {
     cycleTimeoutMs: positiveSafeInteger(config.cycleTimeoutMs, DEFAULT_CYCLE_TIMEOUT_MS, 'cycleTimeoutMs'),
     consultTimeoutMs: positiveSafeInteger(config.consultTimeoutMs, DEFAULT_CONSULT_TIMEOUT_MS, 'consultTimeoutMs'),
     ledgerDir: normalizedDirectory(config.ledgerDir, dshHomePath(DEFAULT_LEDGER_DIR_NAME), 'ledgerDir'),
+    knowledgeMaxEntries: positiveSafeInteger(config.knowledgeMaxEntries, DEFAULT_KNOWLEDGE_MAX_ENTRIES, 'knowledgeMaxEntries'),
+    knowledgePromptLines: positiveSafeInteger(config.knowledgePromptLines, DEFAULT_KNOWLEDGE_PROMPT_LINES, 'knowledgePromptLines'),
   }
 }
 
-const USAGE = 'Usage: /rsi [status|run|merge|decline|summary|history|rollback [<archive id>]]'
+const USAGE = 'Usage: /rsi [status|run|merge|decline|summary|knowledge|history|rollback [<archive id>]]'
 
 /** Where a merge or decline decision came from: a human surface or the background policy. */
 export type RsiDecisionSource = 'command' | 'consult' | 'auto'
@@ -554,8 +573,9 @@ export class DualCoreRsiService extends TypertRemoteService {
         maxCharsPerSession: this.resolved.digestMaxCharsPerSession,
         includeStored: this.resolved.digestIncludeStoredSessions,
       })
+      const knowledge = this.knowledgeForDistiller()
       const output = await this.ctx.rsiDistiller.distill(
-        { active, daemon, digest, budgets: this.resolved },
+        { active, daemon, digest, knowledge, budgets: this.resolved },
         { parent: anchor, signal },
       )
       // Content-dedup skip: a candidate carrying the active policy's exact
@@ -615,6 +635,11 @@ export class DualCoreRsiService extends TypertRemoteService {
       }
       this.state = { ...this.state, cycleCounter: this.state.cycleCounter + 1 }
       await this.domain.table('cycles').put(record.id, record)
+      await this.depositKnowledge(adopted ? 'insight' : 'rejection',
+        adopted
+          ? `adopted: ${output.rationale} (scored ${candidateScore.toFixed(3)} over ${baselineScore.toFixed(3)})`
+          : `kept the current policy over: ${output.rationale} (candidate scored ${candidateScore.toFixed(3)} against ${baselineScore.toFixed(3)})`,
+        cycleId)
       await this.commitState()
       if (adopted) {
         await this.ledger.record({
@@ -753,6 +778,9 @@ export class DualCoreRsiService extends TypertRemoteService {
     const pendingScore = this.requiredScore(pending.generation)
     const archived = await this.adoptCore(pending.generation)
     await this.decideCycle(pending.cycle, 'merged')
+    await this.depositKnowledge('insight',
+      `adopted by the user: ${pending.cycle.rationale} (scored ${pendingScore.toFixed(3)} over ${pending.cycle.baselineScore.toFixed(3)})`,
+      pending.cycle.id)
     await this.commitState()
     const ledger = await this.ledger.record({
       reason: 'merge',
@@ -780,6 +808,9 @@ export class DualCoreRsiService extends TypertRemoteService {
     }
     this.state = { ...this.state, pendingCandidateId: undefined, lastDecisionAt: Date.now() }
     await this.decideCycle(pending.cycle, 'declined')
+    await this.depositKnowledge('rejection',
+      `the user kept the current policy over: ${pending.cycle.rationale} (candidate scored ${pending.cycle.candidateScore.toFixed(3)} against ${pending.cycle.baselineScore.toFixed(3)})`,
+      pending.cycle.id)
     await this.commitState()
     this.notifyChanged()
     return { cycle: pending.cycle, source }
@@ -863,7 +894,12 @@ export class DualCoreRsiService extends TypertRemoteService {
    * @param limit - maximum entries of each kind (default 20).
    * @returns bounded history.
    */
-  async history(limit: number = 20): Promise<{ cycles: RsiCycleRecord[]; archives: RsiArchiveEntry[]; incidents: RsiIncidentRecord[] }> {
+  async history(limit: number = 20): Promise<{
+    cycles: RsiCycleRecord[]
+    archives: RsiArchiveEntry[]
+    incidents: RsiIncidentRecord[]
+    knowledge: RsiKnowledgeEntry[]
+  }> {
     await this.waitReady()
     const cycles = [...this.domain.table('cycles').entries()]
       .sort(([a], [b]) => Number(b) - Number(a))
@@ -877,7 +913,11 @@ export class DualCoreRsiService extends TypertRemoteService {
       .map(([, record]) => record)
       .sort((a, b) => suffixRank(b.id) - suffixRank(a.id))
       .slice(0, limit)
-    return { cycles, archives, incidents }
+    const knowledge = [...this.domain.table('knowledge').entries()]
+      .map(([, entry]) => entry)
+      .sort((a, b) => suffixRank(b.id) - suffixRank(a.id))
+      .slice(0, limit)
+    return { cycles, archives, incidents, knowledge }
   }
 
   /**
@@ -912,12 +952,17 @@ export class DualCoreRsiService extends TypertRemoteService {
       .map(([, record]) => record)
       .sort((a, b) => suffixRank(b.id) - suffixRank(a.id))
       .slice(0, 20)
+    const knowledge = [...this.domain.table('knowledge').entries()]
+      .map(([, entry]) => entry)
+      .sort((a, b) => suffixRank(b.id) - suffixRank(a.id))
+      .slice(0, 20)
     return {
       daemonEnabled: this.resolved.daemonEnabled,
       mergePolicy: this.resolved.mergePolicy,
       cycleRunning: this.cycleRunning,
       evolutions,
       repairs,
+      knowledge,
     }
   }
 
@@ -1031,12 +1076,57 @@ export class DualCoreRsiService extends TypertRemoteService {
     throw new Error('the daemon round exhausted its attempts without settling')
   }
 
+  /**
+   * Deposit one line into the long-term knowledge base: exact (kind, text)
+   * duplicates are skipped, the line is bounded to one entry, and the oldest
+   * entries are evicted past `knowledgeMaxEntries`. The caller commits.
+   * @param kind - what the entry teaches.
+   * @param text - the raw knowledge line.
+   * @param sourceCycleId - cycle whose settlement deposited it.
+   * @returns the deposited entry, or undefined for an exact duplicate.
+   */
+  private async depositKnowledge(kind: RsiKnowledgeKind, text: string, sourceCycleId?: RsiCycleId): Promise<RsiKnowledgeEntry | undefined> {
+    const normalized = text.trim().slice(0, KNOWLEDGE_TEXT_MAX_CHARS)
+    /* v8 ignore next -- every caller deposits a non-empty rationale- or detail-derived line */
+    if (normalized.length === 0) return undefined
+    const entries = [...this.domain.table('knowledge').entries()]
+    if (entries.some(([, entry]) => entry.kind === kind && entry.text === normalized)) return undefined
+    const counter = this.state.knowledgeCounter ?? 0
+    const entry: RsiKnowledgeEntry = {
+      id: RsiKnowledgeId(`kn-${counter + 1}`),
+      kind,
+      text: normalized,
+      sourceCycleId,
+      depositedAt: Date.now(),
+    }
+    this.state = { ...this.state, knowledgeCounter: counter + 1 }
+    await this.domain.table('knowledge').put(entry.id, entry)
+    // Insertion order is deposit order, so the head is the oldest entry.
+    const overflow = entries.length + 1 - this.resolved.knowledgeMaxEntries
+    for (let index = 0; index < overflow; index += 1) {
+      const oldest = entries[index]
+      /* v8 ignore next 2 -- entries and the table share one key set at this point */
+      if (oldest === undefined) break
+      await this.domain.table('knowledge').delete(oldest[0])
+    }
+    return entry
+  }
+
+  /** The knowledge base for a distillation, oldest first, bounded to the prompt line budget. */
+  private knowledgeForDistiller(): RsiKnowledgeEntry[] {
+    return [...this.domain.table('knowledge').entries()]
+      .map(([, entry]) => entry)
+      .slice(-this.resolved.knowledgePromptLines)
+  }
+
   /** Persist one self-repair incident and advance the incident counter. */
   private async recordIncident(fields: Omit<RsiIncidentRecord, 'id'>): Promise<RsiIncidentRecord> {
     const counter = this.state.incidentCounter ?? 0
     const record: RsiIncidentRecord = { id: RsiIncidentId(`inc-${counter + 1}`), ...fields }
     this.state = { ...this.state, incidentCounter: counter + 1 }
     await this.domain.table('incidents').put(record.id, record)
+    await this.depositKnowledge('repair-lesson',
+      `recovered from "${fields.detail}" (${fields.recovery})`)
     await this.commitState()
     this.notifyChanged()
     return record
@@ -1299,6 +1389,10 @@ export class DualCoreRsiService extends TypertRemoteService {
       const { cycles, archives, incidents } = await this.history(20)
       return { kind: 'success', text: renderHistory(cycles, archives, incidents) }
     }
+    if (control === 'knowledge') {
+      const { knowledge } = await this.history(20)
+      return { kind: 'success', text: renderKnowledge(knowledge, 20) }
+    }
     if (control === 'rollback' || /^rollback(?=\s)/iu.test(input)) {
       const explicit = /^rollback(?=\s)/iu.test(input) ? input.slice(8).trim() : ''
       try {
@@ -1313,7 +1407,7 @@ export class DualCoreRsiService extends TypertRemoteService {
 }
 
 /** Rank one counter-derived archive or incident key newest-last by its numeric suffix (`arc-3`/`inc-3` → 3). */
-function suffixRank(id: RsiArchiveId | RsiIncidentId): number {
+function suffixRank(id: RsiArchiveId | RsiIncidentId | RsiKnowledgeId): number {
   const suffix = Number(id.slice(4))
   /* v8 ignore next -- ids are always minted as <prefix>-<counter> */
   return Number.isFinite(suffix) ? suffix : -1

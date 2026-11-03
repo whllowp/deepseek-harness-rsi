@@ -45,6 +45,10 @@ kind: "package-reference"
 
 每次采纳（自动或合入）与回滚都把采纳的产物集物化为纯文件（`policy/guidance.md`、`policy/skills/*.md`、`policy/meta.json`），写入 `ledgerDir`（默认 `~/.dsh/dual-core-rsi-ledger`）下的专用 git 仓库并提交。`git log` 以世代、分数与理由命名每个变更点；`git show` 能对比任意两版采纳的策略。该仓库属于守护核，从不触碰你的项目工作树。缺少 `git` 可执行文件或提交失败都不会撤销已结算的互换：归档仍覆盖回滚，缺口会在合入结果与日志中报告。
 
+### 长期知识库
+
+每个已结算循环都会向存储域内的持久知识库沉淀一行教训，让教训比学到它的策略世代活得更久：采纳沉淀**洞察**（理由及其得分），评估后被门槛拒绝沉淀**拒绝教训**（提了什么、为何现策略胜出），每条记录的自我修复沉淀**修复教训**（哪里坏了、守护核如何恢复）。`consult` 下人类的合入与拒绝从决策一侧沉淀同样的教训。完全相同的（种类，文本）永不重复沉淀，超过 `knowledgeMaxEntries` 时逐出最旧条目。每次后续蒸馏都会读取最新 `knowledgePromptLines` 条——按时间正序，并附带“建立在它之上、没有新证据不得重提被拒绝方向”的指令——守护核因此复利知识而非反复重学。`/rsi knowledge` 列出最新条目，侧边栏面板带有知识库区，git 台账仍记录每一代被采纳的策略。
+
 ### 策略何时过期
 
 `/rsi` 与 `rsi_status` 展示知识截止时间（`Knowledge current as of: …`），并统计活动晚于该截止时间的活跃会话数。计数非零时，状态会提示"这些活动尚未进入当前策略"；调度守护核会在下一次 tick 折入这些活动，`/rsi run` 可立即刷新，让老化的策略依据证据刷新，而不是无声漂移。
@@ -72,6 +76,8 @@ kind: "package-reference"
 | `cycleTimeoutMs` | `600000` | 单次调度循环尝试的时限。 |
 | `consultTimeoutMs` | `300000` | 退出合入咨询等待回答的毫秒数。 |
 | `ledgerDir` | `~/.dsh/dual-core-rsi-ledger` | 记录合入与回滚的本地 git 台账目录。 |
+| `knowledgeMaxEntries` | `200` | 长期知识库保留的最大条目数（逐出最旧）。 |
+| `knowledgePromptLines` | `40` | 单次蒸馏携带的最大知识行数，保留最新。 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-experimental-dual-core-rsi)是所有接受字段的唯一来源。违反任一预算的蒸馏提案会让该循环失败，而不是被截断。
 

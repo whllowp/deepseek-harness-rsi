@@ -900,6 +900,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   RsiDistillOutput: 'distiller outputs are owned by packages/experimental/dual-core-rsi/README.md',
   RsiGeneration: 'improvable-surface generations are owned by packages/experimental/dual-core-rsi/README.md',
   RsiActivityView: 'the sidebar activity projection is owned by packages/experimental/dual-core-rsi/README.md',
+  RsiKnowledgeEntry: 'long-term knowledge entries are owned by packages/experimental/dual-core-rsi/README.md',
   RsiDecisionSource: 'merge decision sources are owned by packages/experimental/dual-core-rsi/README.md',
   RsiMergeResult: 'merge results are owned by packages/experimental/dual-core-rsi/README.md',
   RsiDeclineResult: 'decline results are owned by packages/experimental/dual-core-rsi/README.md',

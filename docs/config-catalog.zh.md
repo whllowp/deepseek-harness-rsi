@@ -1094,6 +1094,10 @@ export interface Config {
   consultTimeoutMs?: number
   /** Directory of the local git ledger recording merged and rolled-back policies (default `~/.dsh/dual-core-rsi-ledger`). */
   ledgerDir?: string
+  /** Maximum knowledge entries retained in the long-term knowledge base (default 200). */
+  knowledgeMaxEntries?: number
+  /** Maximum knowledge lines handed to one distillation (default 40, newest kept). */
+  knowledgePromptLines?: number
 }
 
 /**

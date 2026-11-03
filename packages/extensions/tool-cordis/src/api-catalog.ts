@@ -1097,7 +1097,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the status view.',
       },
       {
-        signature: 'async history(limit: number = 20): Promise<{ cycles: RsiCycleRecord[]; archives: RsiArchiveEntry[]; incidents: RsiIncidentRecord[] }>',
+        signature: 'async history(limit: number = 20): Promise<{ cycles: RsiCycleRecord[] archives: RsiArchiveEntry[] incidents: RsiIncidentRecord[] knowledge: RsiKnowledgeEntry[] }>',
         description: 'List recent cycles, archives, and self-repair incidents, newest first.',
         parameters: [{ name: 'limit', description: 'maximum entries of each kind (default 20).' }],
         returns: 'bounded history.',
@@ -6929,7 +6929,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RsiActivityView',
-    declaration: 'export interface RsiActivityView {\n    readonly daemonEnabled: boolean;\n    readonly mergePolicy: RsiMergePolicy;\n    readonly cycleRunning: boolean;\n    readonly evolutions: readonly RsiEvolutionEntry[];\n    readonly repairs: readonly RsiIncidentRecord[];\n}',
+    declaration: 'export interface RsiActivityView {\n    readonly daemonEnabled: boolean;\n    readonly mergePolicy: RsiMergePolicy;\n    readonly cycleRunning: boolean;\n    readonly evolutions: readonly RsiEvolutionEntry[];\n    readonly repairs: readonly RsiIncidentRecord[];\n    readonly knowledge: readonly RsiKnowledgeEntry[];\n}',
   },
   {
     name: 'RsiArchiveEntry',
@@ -6985,7 +6985,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RsiDistillInput',
-    declaration: 'export interface RsiDistillInput {\n    readonly active: RsiGeneration;\n    readonly daemon: RsiGeneration;\n    readonly digest: RsiSessionDigest;\n    readonly budgets: RsiArtifactBudgets;\n}',
+    declaration: 'export interface RsiDistillInput {\n    readonly active: RsiGeneration;\n    readonly daemon: RsiGeneration;\n    readonly digest: RsiSessionDigest;\n    readonly knowledge: readonly RsiKnowledgeEntry[];\n    readonly budgets: RsiArtifactBudgets;\n}',
   },
   {
     name: 'RsiDistillOptions',
@@ -7026,6 +7026,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RsiIncidentRecovery',
     declaration: 'export type RsiIncidentRecovery = \'retried\' | \'deferred\';',
+  },
+  {
+    name: 'RsiKnowledgeEntry',
+    declaration: 'export interface RsiKnowledgeEntry {\n    readonly id: RsiKnowledgeId;\n    readonly kind: RsiKnowledgeKind;\n    readonly text: string;\n    readonly sourceCycleId?: RsiCycleId | undefined;\n    readonly depositedAt: number;\n}',
+  },
+  {
+    name: 'RsiKnowledgeId',
+    declaration: 'export type RsiKnowledgeId = Branded<\'rsi-knowledge\'>;',
+  },
+  {
+    name: 'RsiKnowledgeKind',
+    declaration: 'export type RsiKnowledgeKind = \'insight\' | \'rejection\' | \'repair-lesson\';',
   },
   {
     name: 'RsiLedgerOutcome',

@@ -1,6 +1,6 @@
 /** Left-sidebar main panel: every background evolution and self-repair the dual-core RSI daemon recorded. */
 import { useSyncExternalStore } from 'react'
-import type { RsiEvolutionEntry, RsiIncidentRecord } from '@deepseek-ai/dsh-experimental-dual-core-rsi/client'
+import type { RsiEvolutionEntry, RsiIncidentRecord, RsiKnowledgeEntry } from '@deepseek-ai/dsh-experimental-dual-core-rsi/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { ActivitySource } from './activity-source.ts'
@@ -84,6 +84,23 @@ function RepairRow({ incident, t }: { incident: RsiIncidentRecord; t: PropsLocal
 }
 
 /**
+ * Render one accumulated knowledge line: what it teaches and when it landed.
+ * @param props - the entry and localized copy.
+ * @returns the rendered row.
+ */
+function KnowledgeRow({ entry, t }: { entry: RsiKnowledgeEntry; t: PropsLocale<typeof NS>['t'] }) {
+  return (
+    <li className={css.row}>
+      <div className={css.rowHead}>
+        <span className={css.rowTitle}>{t(`knowledge.kind.${entry.kind}`)}</span>
+        <span className={css.rowMeta}>{formatInstant(entry.depositedAt)}</span>
+      </div>
+      <div className={css.detail}>{entry.text}</div>
+    </li>
+  )
+}
+
+/**
  * Render the daemon's background activity: the policy line, the evolution
  * list, and the repair list, with loading, error, and empty states.
  * @param props - the shared activity source and localized copy.
@@ -130,6 +147,14 @@ export function RsiPanel(props: RsiPanelProps) {
               <h3 className={css.section}>{t('section.repairs')}</h3>
               <ul className={css.list}>
                 {view.repairs.map(incident => <RepairRow key={incident.id} incident={incident} t={t} />)}
+              </ul>
+            </section>
+          )}
+          {view.knowledge.length === 0 ? null : (
+            <section>
+              <h3 className={css.section}>{t('section.knowledge')}</h3>
+              <ul className={css.list}>
+                {view.knowledge.map(entry => <KnowledgeRow key={entry.id} entry={entry} t={t} />)}
               </ul>
             </section>
           )}

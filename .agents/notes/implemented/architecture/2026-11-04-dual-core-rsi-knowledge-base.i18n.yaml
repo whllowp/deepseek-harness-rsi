@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-11-04-dual-core-rsi-knowledge-base.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-04-dual-core-rsi-knowledge-base.md
+/agent-note-long-term-knowledge-base-for-the-self-evolving-daemon:
+  en: b24445c234d9c865
+  zh: a3634d43f59e4166
+/agent-note-long-term-knowledge-base-for-the-self-evolving-daemon/problem:
+  en: 9dc90e6ba3bb202f
+  zh: 3978cbfbc3585d42
+/agent-note-long-term-knowledge-base-for-the-self-evolving-daemon/decision:
+  en: d17bbc0dd74e06de
+  zh: 3eb9323920c4cdd3
+/agent-note-long-term-knowledge-base-for-the-self-evolving-daemon/consequences:
+  en: cf6b366b64334e9c
+  zh: d84981bd12a54e7e
+/agent-note-long-term-knowledge-base-for-the-self-evolving-daemon/alternatives-considered:
+  en: 19260e58afcb0a53
+  zh: d2673e16b9905af0
