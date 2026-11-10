@@ -187,6 +187,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/experimental/session-search': { kind: 'indirect', reason: 'The profile layer delegates model-visible behavior to its selected capability.' },
   'packages/experimental/ralph-bundle': { kind: 'indirect', reason: 'The profile layer delegates model-visible behavior to its selected capability.' },
   'packages/experimental/dual-core-rsi-bundle': { kind: 'indirect', reason: 'The profile layer delegates model-visible behavior to the dual-core RSI service it mounts.' },
+  'packages/experimental/dual-core-rsi-evolution-bundle': { kind: 'indirect', reason: 'The profile layer delegates model-visible behavior to the evolution plugins and the dual-core RSI service it mounts.' },
   'packages/experimental/terminal-bundle': { kind: 'indirect', reason: 'The profile layer delegates model-visible behavior to its selected capability.' },
   'packages/experimental/badge-skill-bundle': { kind: 'indirect', reason: 'The profile layer delegates model-visible behavior to its selected capability.' },
   'packages/experimental/session-titles-bundle': { kind: 'indirect', reason: 'The profile layer delegates model-visible behavior to its selected capability.' },

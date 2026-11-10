@@ -1,0 +1,54 @@
+# The dual-core RSI evolution profile: the same service and client surfaces as
+# the dual-core RSI bundle, with the shipped distiller and benchmark providers
+# replaced by the evolution package's Dream-RSI replay distiller and Harmony
+# multi-objective benchmark over a shared replay ledger. An alternative to the
+# dual-core RSI bundle: mount one or the other, never both.
+- insert:
+    - id: dual-core-rsi-evolution-ledger
+      name: '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/evolution-ledger'
+      config:
+        maxProposals: 200
+    - id: dual-core-rsi-benchmark
+      name: '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/harmony-benchmark'
+      config:
+        cases:
+          - name: runs-tests-before-done
+            weight: 2
+            requiresGuidance:
+              - npm test
+          - name: git-status-first
+            weight: 1
+            requiresGuidance:
+              - git status
+          - name: changelog-on-release
+            weight: 1
+            requiresGuidance:
+              - CHANGELOG
+          - name: concise-policy
+            weight: 1
+            maxGuidanceChars: 1200
+        objectives:
+          - name: verification
+            weight: 0.75
+            cases:
+              - runs-tests-before-done
+              - git-status-first
+              - changelog-on-release
+          - name: economy
+            weight: 0.25
+            cases:
+              - concise-policy
+    - id: dual-core-rsi-distiller
+      name: '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/replay-distiller'
+      config:
+        subagentProvider: spawn
+        maxLessons: 3
+        minSamples: 2
+    - id: dual-core-rsi
+      name: '@deepseek-ai/dsh-experimental-dual-core-rsi'
+      config:
+        threshold: 0.05
+    - id: ui-rsi
+      name: '@deepseek-ai/dsh-experimental-client-ui-rsi'
+    - id: ui-zelda-pet
+      name: '@deepseek-ai/dsh-experimental-client-ui-zelda-pet'

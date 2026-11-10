@@ -2058,6 +2058,31 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'rsiEvolutionLedger',
+    summary: 'Service Definition of the replay ledger.',
+    description: 'Service Definition of the replay ledger. One row per distinct proposal content; benchmark scores join by fingerprint. Ledger writes settle on their own domain and never join a cycle commit.',
+    methods: [
+      {
+        signature: 'abstract recordProposal(artifacts: RsiArtifacts, observation: { rationale: string matchedActive: boolean baselineScore?: number }): Promise<void>',
+        description: 'Record one distilled proposal, upserting its content row: repeats bump the count and refresh the proposal facts; the score side is untouched.',
+        parameters: [{ name: 'artifacts', description: 'the proposed artifact set.' }, { name: 'observation', description: '.baselineScore - active policy\'s recorded score at distill time, when known.' }],
+        returns: 'resolution when the row is durable.',
+      },
+      {
+        signature: 'abstract recordScore(artifacts: RsiArtifacts, score: number): Promise<void>',
+        description: 'Record the latest benchmark score for one artifact set\'s content.',
+        parameters: [{ name: 'artifacts', description: 'the evaluated artifact set.' }, { name: 'score', description: 'the earned score.' }],
+        returns: 'resolution when the row is durable; content never proposed resolves too (no row to join).',
+      },
+      {
+        signature: 'abstract entries(): Promise<readonly RsiReplayProposal[]>',
+        description: 'Snapshot every recorded proposal, oldest by first distillation first.',
+        parameters: [],
+        returns: 'the bounded ledger rows.',
+      },
+    ],
+  },
+  {
     key: 'sandbox',
     summary: 'Abstract process-sandbox service.',
     description: 'Abstract process-sandbox service. confine must return enforcing argv or fail closed at wrap or runner-execution time; silent unconfined passthrough is forbidden. Functional probes arbitrate multi-runner chains and may be skipped for a sole candidate, whose own refusal remains the fail-closed end.',
@@ -7058,6 +7083,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RsiPendingCandidate',
     declaration: 'export interface RsiPendingCandidate {\n    readonly generation: RsiGeneration;\n    readonly cycle: RsiCycleRecord;\n}',
+  },
+  {
+    name: 'RsiReplayProposal',
+    declaration: 'export type RsiReplayProposal = z.infer<typeof proposalSchema>;',
   },
   {
     name: 'RsiSessionDigest',

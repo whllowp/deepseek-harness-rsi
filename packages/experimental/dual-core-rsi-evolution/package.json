@@ -1,0 +1,62 @@
+{
+  "name": "@deepseek-ai/dsh-experimental-dual-core-rsi-evolution",
+  "description": "Dual-core RSI evolution plugins: a Dream-RSI-style replay distiller that dreams over recorded proposal/score outcomes, a Harmony-Harness-style multi-objective benchmark whose Tchebycheff gate keeps pressure on the worst objective, and their shared replay ledger, all mounted through the existing dual-core RSI seams",
+  "version": "0.2.1-rc.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "packages/experimental/dual-core-rsi-evolution"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./evolution-ledger": {
+      "types": "./lib/types/plugin-evolution-ledger.d.ts",
+      "default": "./lib/types/plugin-evolution-ledger.js"
+    },
+    "./harmony-benchmark": {
+      "types": "./lib/types/plugin-harmony-benchmark.d.ts",
+      "default": "./lib/types/plugin-harmony-benchmark.js"
+    },
+    "./replay-distiller": {
+      "types": "./lib/types/plugin-replay-distiller.d.ts",
+      "default": "./lib/types/plugin-replay-distiller.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-storage-domain": "workspace:~"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-experimental-dual-core-rsi": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-agent": "workspace:*",
+    "@deepseek-ai/dsh-agent-loop-testkit": "workspace:*",
+    "@deepseek-ai/dsh-scope": "workspace:*",
+    "@deepseek-ai/dsh-session": "workspace:*",
+    "@deepseek-ai/dsh-storage": "workspace:*",
+    "@deepseek-ai/dsh-storage-domain": "workspace:~",
+    "@deepseek-ai/dsh-storage-json": "workspace:*",
+    "@deepseek-ai/dsh-subagent": "workspace:*"
+  }
+}

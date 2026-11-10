@@ -2,7 +2,7 @@
 
 [English](dual-core-rsi.md) | 中文
 
-实验性双核 RSI 服务、其蒸馏与基准接缝以及 `/rsi` 命令共享的类型。[双核 RSI Agent Note](../../.agents/notes/implemented/architecture/2026-10-22-dual-core-rsi-mode.zh.md) 持有双核模型，[2026-10-28 的记录](../../.agents/notes/implemented/architecture/2026-10-28-dual-core-rsi-daemon-consult-merge.zh.md) 持有调度守护核、咨询制合入与 git 台账；本页记录来自 [`packages/experimental/dual-core-rsi/src/types.ts`](../../packages/experimental/dual-core-rsi/src/types.ts) 的持久化与客户端可见形式。
+实验性双核 RSI 服务、其蒸馏与基准接缝以及 `/rsi` 命令共享的类型。[双核 RSI Agent Note](../../.agents/notes/implemented/architecture/2026-10-22-dual-core-rsi-mode.zh.md) 持有双核模型，[2026-10-28 的记录](../../.agents/notes/implemented/architecture/2026-10-28-dual-core-rsi-daemon-consult-merge.zh.md) 持有调度守护核、咨询制合入与 git 台账；本页记录来自 [`packages/experimental/dual-core-rsi/src/types.ts`](../../packages/experimental/dual-core-rsi/src/types.ts) 的持久化与客户端可见形式。[演进插件](../../packages/experimental/dual-core-rsi-evolution/README.zh.md)经由这些相同的接缝挂载 Dream-RSI 式回放蒸馏器与 Harmony-Harness 式多目标基准，不改动本包。
 
 ## Generations and archives
 
@@ -313,6 +313,42 @@ abstract distill(input: RsiDistillInput, options: RsiDistillOptions): Promise<Rs
 ```
 
 Source: [`packages/experimental/dual-core-rsi/src/distiller.ts`](../../packages/experimental/dual-core-rsi/src/distiller.ts)
+
+<a id="ctxrsievolutionledger--rsievolutionledger-abstract-seam"></a>
+
+### `ctx.rsiEvolutionLedger` — `RsiEvolutionLedger` (abstract seam)
+
+Service Definition of the replay ledger. One row per distinct proposal content; benchmark scores join by fingerprint. Ledger writes settle on their own domain and never join a cycle commit.
+
+```ts cordis-catalog
+/**
+ * Record one distilled proposal, upserting its content row: repeats bump
+ * the count and refresh the proposal facts; the score side is untouched.
+ * @param artifacts - the proposed artifact set.
+ * @param observation - the proposal facts to store.
+ * @param observation.rationale - distiller rationale (bounded at rest).
+ * @param observation.matchedActive - whether the content equaled the then-active policy.
+ * @param observation.baselineScore - active policy's recorded score at distill time, when known.
+ * @returns resolution when the row is durable.
+ */
+abstract recordProposal(artifacts: RsiArtifacts, observation: { rationale: string matchedActive: boolean baselineScore?: number }): Promise<void>
+
+/**
+ * Record the latest benchmark score for one artifact set's content.
+ * @param artifacts - the evaluated artifact set.
+ * @param score - the earned score.
+ * @returns resolution when the row is durable; content never proposed resolves too (no row to join).
+ */
+abstract recordScore(artifacts: RsiArtifacts, score: number): Promise<void>
+
+/**
+ * Snapshot every recorded proposal, oldest by first distillation first.
+ * @returns the bounded ledger rows.
+ */
+abstract entries(): Promise<readonly RsiReplayProposal[]>
+```
+
+Source: [`packages/experimental/dual-core-rsi-evolution/src/ledger.ts`](../../packages/experimental/dual-core-rsi-evolution/src/ledger.ts)
 
 <a id="dual-core-rsi-events"></a>
 

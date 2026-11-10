@@ -1,0 +1,76 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/experimental/dual-core-rsi-evolution/README.md
+/:
+  en: 173714c5c27d31dd
+  zh: 36d60b1879eed732
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution:
+  en: bcd4165a605a0574
+  zh: 27397242710efffe
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/summary:
+  en: 9a7778cf97d8b7cf
+  zh: 88d68475676de598
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/table-of-contents:
+  en: b563e4ec4727d0de
+  zh: bbfde3e94b2fe768
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/use-this-package:
+  en: 4e0df0cc2a389085
+  zh: 27ab6adfc81d8378
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/use-this-package/the-replay-ledger:
+  en: c89dd739fc614544
+  zh: 4951a64810d143d0
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/use-this-package/dreaming-before-distilling:
+  en: 4bd9d2c866dc6d80
+  zh: f413f8084ce969a7
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/use-this-package/the-tchebycheff-gate:
+  en: 6634cd362dd4dfab
+  zh: 517f2ddd259b0059
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/use-this-package/config:
+  en: 5bf78f4eff5aa0d8
+  zh: e6c4aea328b5aabd
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/use-this-package/model-experience-audit-note:
+  en: 65dd2b284e2c32e0
+  zh: abefd55c39527385
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/understand-the-implementation:
+  en: 2718678f2b97fc8d
+  zh: cb056ce94be574fd
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/further-exploration:
+  en: 6bc1496a1b0c0b48
+  zh: ee2f1229f7e25e2f
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/model-experience/system-prompt:
+  en: cf78b9dd5596495f
+  zh: 24ba47a0c5e02586
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/model-experience/system-prompt/what-the-model-sees:
+  en: 1bd0c5c20edf7bd9
+  zh: 53c9fd88ddde7204
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/model-experience/system-prompt/what-the-model-sees/replay-lessons-in-the-distiller-child-s-mission-only:
+  en: b27c810a4eb64108
+  zh: a82a9e7a40c31cb4
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/model-experience/system-prompt/token-effect:
+  en: 002384e699dc9118
+  zh: 401438c545577828
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/model-experience/system-prompt/kv-cache-effect:
+  en: b0562d3cd9e027aa
+  zh: 00af24283ed70697
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/model-experience/tool-schemas:
+  en: 3039bc5e7a796b21
+  zh: 6b7a9eaf69c9ea53
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/model-experience/tool-schemas/what-the-model-sees:
+  en: 7cfa96f7f44dede8
+  zh: 114aef40693de5d2
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/model-experience/tool-schemas/token-effect:
+  en: 63d0cfcccae07885
+  zh: 3b570cff2396107c
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/model-experience/tool-schemas/kv-cache-effect:
+  en: 7fe6e17835c11843
+  zh: 34399aad788250b7
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/known-limitations-and-deferred-work:
+  en: 2875ffa6e7da2881
+  zh: 94ed670843bb4742
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/known-limitations-and-deferred-work/dev-note:
+  en: c1ba6a07af731e4f
+  zh: 01c860384342641a

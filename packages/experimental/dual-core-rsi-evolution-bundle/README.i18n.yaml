@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/experimental/dual-core-rsi-evolution-bundle/README.md
+/:
+  en: 04c88eb225ce5255
+  zh: 758dada68e0ede0b
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution-bundle:
+  en: 6c6b0618571f1f6f
+  zh: 434dd6857858a10f
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution-bundle/summary:
+  en: b84cb620177b57d6
+  zh: e6a66fa2d40a472f
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution-bundle/table-of-contents:
+  en: b563e4ec4727d0de
+  zh: bbfde3e94b2fe768
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution-bundle/use-this-package:
+  en: 656367dc74fdcf20
+  zh: 5d0e720dda836a8d
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution-bundle/understand-the-implementation:
+  en: 6dc4d09e37157250
+  zh: 701426752d57220b
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution-bundle/further-exploration:
+  en: f4afdf8e176b5df6
+  zh: d3db11e4df80c140
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution-bundle/model-experience:
+  en: 2835433c042a2f94
+  zh: bc9b60577d5816dc
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution-bundle/model-experience/kv-cache-effect:
+  en: 25f20eda0e696067
+  zh: f4d7c7c19819ee2a
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution-bundle/known-limitations-and-deferred-work:
+  en: a0e40ffcb18e0ca0
+  zh: 85f4f451a163d8b0
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution-bundle/known-limitations-and-deferred-work/dev-note:
+  en: e37d654f54d1d313
+  zh: d3d6941babac309f

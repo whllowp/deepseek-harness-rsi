@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/subsystems/dual-core-rsi.md
 /dual-core-rsi:
-  en: ed3813c10e198b2e
-  zh: 129a94ffda259c90
+  en: f572536ade5f67d1
+  zh: af3df2b222fb61d0
 /dual-core-rsi/generations-and-archives:
   en: f5387cc73a03f752
   zh: 41eac60caf8f3385

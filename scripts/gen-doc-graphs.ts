@@ -108,6 +108,13 @@ const GROUP_ORDER = [
 
 const SERVICE_ROLES: ServiceRole[] = [
   {
+    key: 'rsiEvolutionLedger',
+    pkg: 'experimental-dual-core-rsi-evolution',
+    title: 'Dual-core RSI replay ledger',
+    mode: 'service',
+    note: 'Records distilled proposals and joins their benchmark scores by content fingerprint so the replay distiller can dream over realized outcomes.',
+  },
+  {
     key: 'cotTranslation',
     pkg: 'experimental-client-ui-cot-translation',
     title: 'Reasoning translation Remote',

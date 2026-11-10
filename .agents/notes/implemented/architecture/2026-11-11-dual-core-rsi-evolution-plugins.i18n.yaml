@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-11-11-dual-core-rsi-evolution-plugins.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-11-dual-core-rsi-evolution-plugins.md
+/agent-note-dual-core-rsi-evolution-plugins-over-paper-mechanisms:
+  en: b3b2f5256f9470b9
+  zh: 83b67a1680dadf88
+/agent-note-dual-core-rsi-evolution-plugins-over-paper-mechanisms/problem:
+  en: 3eff40e94463b42c
+  zh: 1c88c79cceb7985c
+/agent-note-dual-core-rsi-evolution-plugins-over-paper-mechanisms/decision:
+  en: d4aa917dc1caba8c
+  zh: 8edb3049987fb0c6
+/agent-note-dual-core-rsi-evolution-plugins-over-paper-mechanisms/alternatives-considered:
+  en: 77a5d20a074f6da1
+  zh: 95f4c32318279baa
+/agent-note-dual-core-rsi-evolution-plugins-over-paper-mechanisms/consequences:
+  en: ac575a2c7a59deef
+  zh: f4c9dedcd18728f9

@@ -2,7 +2,7 @@
 
 English | [中文](dual-core-rsi.zh.md)
 
-Types shared by the experimental dual-core RSI service, its distiller and benchmark seams, and the `/rsi` command. The [dual-core RSI Agent Note](../../.agents/notes/implemented/architecture/2026-10-22-dual-core-rsi-mode.md) owns the two-core model and the [2026-10-28 note](../../.agents/notes/implemented/architecture/2026-10-28-dual-core-rsi-daemon-consult-merge.md) owns the scheduled daemon, the consult-gated merge, and the git ledger; this page records the durable and client-visible forms from [`packages/experimental/dual-core-rsi/src/types.ts`](../../packages/experimental/dual-core-rsi/src/types.ts).
+Types shared by the experimental dual-core RSI service, its distiller and benchmark seams, and the `/rsi` command. The [dual-core RSI Agent Note](../../.agents/notes/implemented/architecture/2026-10-22-dual-core-rsi-mode.md) owns the two-core model and the [2026-10-28 note](../../.agents/notes/implemented/architecture/2026-10-28-dual-core-rsi-daemon-consult-merge.md) owns the scheduled daemon, the consult-gated merge, and the git ledger; this page records the durable and client-visible forms from [`packages/experimental/dual-core-rsi/src/types.ts`](../../packages/experimental/dual-core-rsi/src/types.ts). The [evolution plugins](../../packages/experimental/dual-core-rsi-evolution/README.md) mount a Dream-RSI-style replay distiller and a Harmony-Harness-style multi-objective benchmark over these same seams without changing this package.
 
 ## Generations and archives
 
@@ -313,6 +313,42 @@ abstract distill(input: RsiDistillInput, options: RsiDistillOptions): Promise<Rs
 ```
 
 Source: [`packages/experimental/dual-core-rsi/src/distiller.ts`](../../packages/experimental/dual-core-rsi/src/distiller.ts)
+
+<a id="ctxrsievolutionledger--rsievolutionledger-abstract-seam"></a>
+
+### `ctx.rsiEvolutionLedger` — `RsiEvolutionLedger` (abstract seam)
+
+Service Definition of the replay ledger. One row per distinct proposal content; benchmark scores join by fingerprint. Ledger writes settle on their own domain and never join a cycle commit.
+
+```ts cordis-catalog
+/**
+ * Record one distilled proposal, upserting its content row: repeats bump
+ * the count and refresh the proposal facts; the score side is untouched.
+ * @param artifacts - the proposed artifact set.
+ * @param observation - the proposal facts to store.
+ * @param observation.rationale - distiller rationale (bounded at rest).
+ * @param observation.matchedActive - whether the content equaled the then-active policy.
+ * @param observation.baselineScore - active policy's recorded score at distill time, when known.
+ * @returns resolution when the row is durable.
+ */
+abstract recordProposal(artifacts: RsiArtifacts, observation: { rationale: string matchedActive: boolean baselineScore?: number }): Promise<void>
+
+/**
+ * Record the latest benchmark score for one artifact set's content.
+ * @param artifacts - the evaluated artifact set.
+ * @param score - the earned score.
+ * @returns resolution when the row is durable; content never proposed resolves too (no row to join).
+ */
+abstract recordScore(artifacts: RsiArtifacts, score: number): Promise<void>
+
+/**
+ * Snapshot every recorded proposal, oldest by first distillation first.
+ * @returns the bounded ledger rows.
+ */
+abstract entries(): Promise<readonly RsiReplayProposal[]>
+```
+
+Source: [`packages/experimental/dual-core-rsi-evolution/src/ledger.ts`](../../packages/experimental/dual-core-rsi-evolution/src/ledger.ts)
 
 <a id="dual-core-rsi-events"></a>
 

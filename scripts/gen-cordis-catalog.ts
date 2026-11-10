@@ -50,6 +50,7 @@ export { REGION_BEGIN, REGION_END }
  * errors, so the partition can never silently drift from the service API.
  */
 export const SERVICE_PAGE: Record<string, string> = {
+  rsiEvolutionLedger: 'dual-core-rsi.md',
   translator: 'translation.md',
   cotTranslation: 'translation.md',
   speechToText: 'voice-input.md',
@@ -901,6 +902,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   RsiGeneration: 'improvable-surface generations are owned by packages/experimental/dual-core-rsi/README.md',
   RsiActivityView: 'the sidebar activity projection is owned by packages/experimental/dual-core-rsi/README.md',
   RsiKnowledgeEntry: 'long-term knowledge entries are owned by packages/experimental/dual-core-rsi/README.md',
+  RsiArtifacts: 'improvable-surface artifact sets are owned by packages/experimental/dual-core-rsi/README.md',
+  RsiReplayProposal: 'replay-ledger proposal rows are owned by packages/experimental/dual-core-rsi-evolution/README.md',
   RsiDecisionSource: 'merge decision sources are owned by packages/experimental/dual-core-rsi/README.md',
   RsiMergeResult: 'merge results are owned by packages/experimental/dual-core-rsi/README.md',
   RsiDeclineResult: 'decline results are owned by packages/experimental/dual-core-rsi/README.md',

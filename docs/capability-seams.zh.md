@@ -9,6 +9,8 @@
 
 ```mermaid
 flowchart LR
+  pkg_experimental_dual_core_rsi_evolution["experimental-dual-core-rsi-evolution"]
+  svc_rsiEvolutionLedger["ctx.rsiEvolutionLedger<br/>Dual-core RSI replay ledger"]
   pkg_experimental_client_ui_cot_translation["experimental-client-ui-cot-translation"]
   svc_cotTranslation["ctx.cotTranslation<br/>Reasoning translation Remote"]
   pkg_experimental_translator["experimental-translator"]
@@ -355,6 +357,7 @@ flowchart LR
   pkg_experimental_dual_core_rsi --> svc_dualCoreRsi
   pkg_experimental_dual_core_rsi --> svc_rsiBenchmark
   pkg_experimental_dual_core_rsi --> svc_rsiDistiller
+  pkg_experimental_dual_core_rsi_evolution --> svc_rsiEvolutionLedger
   pkg_experimental_ptc_runtime_python --> svc_ptcRuntime
   pkg_experimental_speech_to_text --> svc_speechToText
   pkg_experimental_speech_to_text_sensevoice --> svc_speechToText
@@ -624,6 +627,7 @@ flowchart LR
 
 | ctx 键 | 角色 | 所属包 | 实现 | 直接消费方 | 配套插件 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.rsiEvolutionLedger` | `service` | [`experimental-dual-core-rsi-evolution`](../packages/experimental/dual-core-rsi-evolution) | - | - | - | 记录蒸馏提案并按内容指纹连接其基准得分，让回放蒸馏器能在实际结果上做梦。 |
 | `ctx.cotTranslation` | `service` | [`experimental-client-ui-cot-translation`](../packages/experimental/client-ui-cot-translation) | - | - | - | 为展开的思考内容提供有界的 Session 翻译请求，不改变模型可见历史。 |
 | `ctx.translator` | `service` | [`experimental-translator`](../packages/experimental/translator) | - | [`experimental-client-ui-cot-translation`](../packages/experimental/client-ui-cot-translation) | - | 解析 Google 或 Bing 请求，并可选保留统一的实验性 Session 记录。 |
 | `ctx.hmr` | `core` | [`hmr`](../packages/boot/hmr) | - | [`app-boot`](../packages/boot/app-boot) | - | 负责模块和精确配置监听；应用修改共用其队列，自动重载等待应用文件锁。 |
