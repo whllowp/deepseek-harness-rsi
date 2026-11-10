@@ -490,8 +490,7 @@ export class DualCoreRsiService extends TypertRemoteService {
   private attachNow(agent: Agent): void {
     /* v8 ignore next -- duplicate agent/created delivery for one id is a registry invariant violation */
     if (this.applied.has(agent.id)) return
-    const dispose = applyArtifacts(agent.ctx, this.activeGeneration().artifacts, this.ctx.systemPrompt.getSectionOrder('RSI_DISTILLED_POLICY'))
-    this.applied.set(agent.id, { agent, dispose })
+    this.applied.set(agent.id, { agent, dispose: this.applyContained(agent, this.ctx.systemPrompt.getSectionOrder('RSI_DISTILLED_POLICY')) })
   }
 
   /** Re-apply the active generation's artifacts to every attached agent. */
@@ -499,8 +498,25 @@ export class DualCoreRsiService extends TypertRemoteService {
     const order = this.ctx.systemPrompt.getSectionOrder('RSI_DISTILLED_POLICY')
     for (const [id, entry] of [...this.applied.entries()]) {
       entry.dispose()
-      const dispose = applyArtifacts(entry.agent.ctx, this.activeGeneration().artifacts, order)
-      this.applied.set(id, { agent: entry.agent, dispose })
+      this.applied.set(id, { agent: entry.agent, dispose: this.applyContained(entry.agent, order) })
+    }
+  }
+
+  /**
+   * Apply the active policy to one agent, containing a failure to that agent:
+   * the agent keeps working without the distilled policy and the failure is
+   * logged as an actionable error, because the policy is an add-on that must
+   * never block agent creation or the rest of a re-application sweep.
+   * @returns the disposer for whatever the application registered.
+   */
+  private applyContained(agent: Agent, order: number): () => void {
+    try {
+      return applyArtifacts(agent.ctx, this.activeGeneration().artifacts, order)
+    } catch (error) {
+      /* v8 ignore next -- the String arm needs a non-Error throw, which applyArtifacts never raises */
+      const detail = error instanceof Error ? error.message : String(error)
+      this.ctx.logger.error(`dual-core RSI: agent ${agent.id} runs without the distilled policy: ${detail}`)
+      return () => {}
     }
   }
 
@@ -556,6 +572,11 @@ export class DualCoreRsiService extends TypertRemoteService {
       throw new RsiError('no-anchor-agent', 'daemon distillation needs a live agent to anchor its child; open a user session first')
     }
     this.cycleRunning = true
+    // The state commit is the cycle's commit point. A cycle that throws first
+    // restores the pre-cycle state, so no later commit (an incident record, a
+    // human decision) persists a half-applied pointer flip, and live agents
+    // return to the policy that is still active.
+    const committed = this.state
     try {
       const startedAt = Date.now()
       const active = await this.ensureBenchmark(this.activeGeneration(), signal)
@@ -652,6 +673,11 @@ export class DualCoreRsiService extends TypertRemoteService {
       }
       this.notifyChanged()
       return record
+    } catch (error) {
+      const flipped = this.state.activeId !== committed.activeId
+      this.state = committed
+      if (flipped) this.reapplyActive()
+      throw error
     } finally {
       this.cycleRunning = false
     }

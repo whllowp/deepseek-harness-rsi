@@ -144,6 +144,8 @@ interface HarnessOptions {
   abortGated?: boolean
   /** Mount the never-resolving subprocess stub instead of the local runtime. */
   stubSubprocess?: boolean
+  /** Mount the skill registry (default true); false composes none. */
+  skills?: boolean
 }
 
 interface Harness {
@@ -165,7 +167,7 @@ async function harness(options?: HarnessOptions): Promise<Harness> {
   await ctx.plugin(SessionStore)
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt)
-  await ctx.plugin(SkillRegistry)
+  if (options?.skills !== false) await ctx.plugin(SkillRegistry)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(CommandRuntime)
   await ctx.plugin(AgentRegistry)
@@ -201,12 +203,12 @@ interface StubAgentHandle {
 }
 
 /** Build a live idle agent registered with the registry on its own scope. */
-async function stubAgent(harness_: Harness, id: string): Promise<StubAgentHandle> {
+async function stubAgent(harness_: Harness, id: string, inject: readonly string[] = ['systemPrompt', 'skills']): Promise<StubAgentHandle> {
   const session = harness_.ctx.sessions.create(SessionId(id))
   let injected!: Context
   await harness_.ctx.plugin(Object.assign((inner: Context) => {
     injected = inner
-  }, { inject: ['systemPrompt', 'skills'] }))
+  }, { inject: [...inject] }))
   const scopeKey: ScopeKey = {}
   const scope = createScope(injected, scopeKey)
   let status: AgentStatus = 'idle'
@@ -413,6 +415,59 @@ describe('dsh-experimental-dual-core-rsi controller', () => {
     const skills = await core.scope.skills.list({ scope: core.key })
     const distilled = skills.find(skill => skill.name === 'verify-before-done')
     expect(distilled?.description).toContain('verifying work')
+  })
+
+  it('registers distilled skills on an agent scope that never injects the skill registry', async () => {
+    // Real agent scopes do not declare the registry in their inject list; the
+    // registry must still resolve through the scope's service isolation.
+    const test = await tracked(harness({ proposals: [STRONG], rsi: { mergePolicy: 'auto' } }))
+    const core = await stubAgent(test, 'plain-core', ['systemPrompt'])
+    const record = await test.service.runCycle('schedule', new AbortController().signal)
+    expect(record.outcome).toBe('promoted')
+    const skills = await test.ctx.skills.list({ scope: core.key })
+    expect(skills.some(skill => skill.name === 'verify-before-done')).toBe(true)
+    // A scope created after the adoption attaches the skill-carrying policy too.
+    const later = await stubAgent(test, 'later-core', ['systemPrompt'])
+    expect((await test.ctx.skills.list({ scope: later.key })).some(skill => skill.name === 'verify-before-done')).toBe(true)
+  })
+
+  it('keeps agents working without the distilled policy when no skill registry is composed', async () => {
+    const test = await tracked(harness({ proposals: [STRONG], rsi: { mergePolicy: 'auto' }, skills: false }))
+    const errors: string[] = []
+    vi.spyOn(test.ctx.logger, 'error').mockImplementation((...args: unknown[]) => { errors.push(String(args[0])) })
+    const core = await stubAgent(test, 'no-registry-core', ['systemPrompt'])
+    const record = await test.service.runCycle('schedule', new AbortController().signal)
+    // The adoption settles; only the policy application is contained per agent.
+    expect(record.outcome).toBe('promoted')
+    expect(errors.some(line => line.includes(`agent ${core.agent.id} runs without the distilled policy`) && line.includes('no skill registry'))).toBe(true)
+    // Agent creation is never blocked by the add-on policy.
+    await expect(stubAgent(test, 'created-after', ['systemPrompt'])).resolves.toBeDefined()
+    expect(errors.filter(line => line.includes('created-after'))).toHaveLength(1)
+  })
+
+  it('restores the pre-cycle state and the active policy when a cycle fails after the pointer flip', async () => {
+    const test = await tracked(harness({ proposals: [STRONG], deferService: true }))
+    // Capture the service's domain at the storage seam so one write can fail.
+    const failNextCycleWrite: { arm?: () => void } = {}
+    const open = test.ctx.storageDomain.open.bind(test.ctx.storageDomain)
+    vi.spyOn(test.ctx.storageDomain, 'open').mockImplementation(async (spec) => {
+      const domain = await open(spec)
+      failNextCycleWrite.arm = () => {
+        vi.spyOn(domain.table('cycles'), 'put').mockRejectedValueOnce(new Error('disk full'))
+      }
+      return domain
+    })
+    test.service = new DualCoreRsiService(test.ctx, { daemonEnabled: false, mergePolicy: 'auto', ledgerDir: test.ledgerDir })
+    await test.service.waitReady()
+    const core = await stubAgent(test, 'rollback-core')
+    // The cycle record write is the first durable step after adoption flips the pointer.
+    failNextCycleWrite.arm?.()
+    await expect(test.service.runCycle('schedule', new AbortController().signal)).rejects.toThrow('disk full')
+    const status = await test.service.status()
+    expect(status.active.id).toBe('gen-1')
+    expect(status.lastCycle).toBeUndefined()
+    // The live agent carries the still-active (empty) policy again, not the failed candidate's skill.
+    expect((await core.scope.skills.list({ scope: core.key })).some(skill => skill.name === 'verify-before-done')).toBe(false)
   })
 
   it('rolls back to an archive and archives the rollback in turn', async () => {

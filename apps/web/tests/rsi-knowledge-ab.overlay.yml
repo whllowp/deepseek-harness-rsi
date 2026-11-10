@@ -1,0 +1,47 @@
+# Real-model knowledge-base A/B for the dual-core RSI bundle over the stable
+# base and Web bundles: background adoption, a daemon cadence longer than one
+# task turn so every scheduled cycle digests settled sessions, a two-session
+# digest window so early sessions scroll out of the evidence the way they do
+# in a long-running deployment, and a deployment benchmark that rewards the
+# habits the scripted workload repeats.
+- insert:
+    - id: dual-core-rsi-distiller
+      name: '@deepseek-ai/dsh-experimental-dual-core-rsi/distiller-subagent'
+      config:
+        subagentProvider: spawn
+    - id: dual-core-rsi-benchmark
+      name: '@deepseek-ai/dsh-experimental-dual-core-rsi/benchmark-fixture'
+      config:
+        cases:
+          - name: runs-tests-before-done
+            weight: 2
+            requiresGuidance:
+              - npm test
+          - name: git-status-first
+            weight: 1
+            requiresGuidance:
+              - git status
+          - name: changelog-on-release
+            weight: 1
+            requiresGuidance:
+              - CHANGELOG
+          - name: concise-policy
+            weight: 1
+            maxGuidanceChars: 1200
+    - id: dual-core-rsi
+      name: '@deepseek-ai/dsh-experimental-dual-core-rsi'
+      config:
+        threshold: 0.05
+        mergePolicy: auto
+        digestMaxSessions: 2
+        daemonIntervalMs: 90000
+        daemonRetryBackoffMs: 20000
+        daemonMaxRetries: 2
+    - id: ui-rsi
+      name: '@deepseek-ai/dsh-experimental-client-ui-rsi'
+      config:
+        refreshIntervalMs: 2000
+    - id: ui-zelda-pet
+      name: '@deepseek-ai/dsh-experimental-client-ui-zelda-pet'
+      config:
+        refreshIntervalMs: 2000

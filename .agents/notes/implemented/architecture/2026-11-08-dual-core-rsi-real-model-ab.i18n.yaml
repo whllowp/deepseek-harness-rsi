@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-11-08-dual-core-rsi-real-model-ab.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-08-dual-core-rsi-real-model-ab.md
+/agent-note-real-model-end-to-end-a-b-of-the-dual-core-rsi-knowledge-base:
+  en: 10a704ee9c32d20f
+  zh: 5e792648c385a23e
+/agent-note-real-model-end-to-end-a-b-of-the-dual-core-rsi-knowledge-base/problem:
+  en: ad5daf70346ba59e
+  zh: 75dd682562822345
+/agent-note-real-model-end-to-end-a-b-of-the-dual-core-rsi-knowledge-base/decision:
+  en: 6af11ac69e49a6cb
+  zh: 1aa6c592ecf02ed5
+/agent-note-real-model-end-to-end-a-b-of-the-dual-core-rsi-knowledge-base/alternatives-considered:
+  en: 71030a6c136471c5
+  zh: 6c3c1016c9b8e025
+/agent-note-real-model-end-to-end-a-b-of-the-dual-core-rsi-knowledge-base/consequences:
+  en: 087409736fa38eeb
+  zh: 592d4d98575978a4

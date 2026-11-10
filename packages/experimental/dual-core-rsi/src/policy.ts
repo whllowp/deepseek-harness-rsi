@@ -11,10 +11,6 @@ import type { RsiArtifactBudgets, RsiArtifacts, RsiSkillArtifact } from './types
 /** Prompt-section name for the distilled policy applied to user-core agents. */
 export const RSI_DISTILLED_POLICY_SECTION = 'rsi:distilled-policy'
 
-function isNormalizedText(value: string): boolean {
-  return value.length > 0 && value === value.trim()
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -24,15 +20,20 @@ function readSkillArtifact(value: unknown, budgets: RsiArtifactBudgets): RsiSkil
   if (!isRecord(value)) {
     throw new TypeError('RSI skill artifact must be an object')
   }
-  const { name, description, content } = value
+  // Models routinely wrap structured string fields in leading or trailing
+  // whitespace that carries no policy, so the decoder trims it before
+  // validating; whitespace-only text still fails.
+  const name = typeof value['name'] === 'string' ? value['name'].trim() : value['name']
+  const description = typeof value['description'] === 'string' ? value['description'].trim() : value['description']
+  const content = typeof value['content'] === 'string' ? value['content'].trim() : value['content']
   if (typeof name !== 'string' || !isSkillName(name)) {
     throw new TypeError(`RSI skill name "${String(name)}" is not a valid kebab-case skill name`)
   }
-  if (typeof description !== 'string' || !isNormalizedText(description)) {
-    throw new TypeError(`RSI skill "${name}" description must be non-empty normalized text`)
+  if (typeof description !== 'string' || description.length === 0) {
+    throw new TypeError(`RSI skill "${name}" description must be non-empty text`)
   }
-  if (typeof content !== 'string' || !isNormalizedText(content)) {
-    throw new TypeError(`RSI skill "${name}" content must be non-empty normalized text`)
+  if (typeof content !== 'string' || content.length === 0) {
+    throw new TypeError(`RSI skill "${name}" content must be non-empty text`)
   }
   if (description.length > budgets.maxSkillDescriptionChars) {
     throw new TypeError(`RSI skill "${name}" description exceeds maxSkillDescriptionChars (${description.length} > ${budgets.maxSkillDescriptionChars})`)
@@ -50,11 +51,12 @@ function readSkillArtifact(value: unknown, budgets: RsiArtifactBudgets): RsiSkil
 
 /**
  * Decode one artifact set crossing a model JSON boundary against the
- * configured budgets. Every field is checked here before the set is stored
- * or applied; typed same-process callers trust their values instead.
+ * configured budgets. String fields are trimmed of leading and trailing
+ * whitespace, then every field is checked here before the set is stored or
+ * applied; typed same-process callers trust their values instead.
  * @param value - raw artifact value from a distiller output.
  * @param budgets - configured artifact budgets.
- * @returns the validated artifact set.
+ * @returns the validated, trimmed artifact set.
  * @throws TypeError naming the first violated budget or shape rule.
  */
 export function decodeArtifacts(value: unknown, budgets: RsiArtifactBudgets): RsiArtifacts {
@@ -68,9 +70,10 @@ export function decodeArtifacts(value: unknown, budgets: RsiArtifactBudgets): Rs
   if (guidance.length > budgets.maxGuidanceLines) {
     throw new TypeError(`RSI guidance exceeds maxGuidanceLines (${guidance.length} > ${budgets.maxGuidanceLines})`)
   }
-  const guidanceLines = guidance.map((line): string => {
-    if (typeof line !== 'string' || !isNormalizedText(line)) {
-      throw new TypeError('every RSI guidance line must be non-empty normalized text')
+  const guidanceLines = guidance.map((raw: unknown): string => {
+    const line = typeof raw === 'string' ? raw.trim() : raw
+    if (typeof line !== 'string' || line.length === 0) {
+      throw new TypeError('every RSI guidance line must be non-empty text')
     }
     if (line.length > budgets.maxGuidanceLineChars) {
       throw new TypeError(`RSI guidance line exceeds maxGuidanceLineChars (${line.length} > ${budgets.maxGuidanceLineChars})`)
@@ -148,30 +151,47 @@ export function renderPolicySection(artifacts: RsiArtifacts): string | undefined
 /**
  * Apply one artifact set to an agent-scoped context: the distilled-policy
  * prompt section plus one runtime skill registration per skill artifact. The
- * caller owns the returned disposer; disposing it removes every registration
- * this call made.
+ * skill registry resolves through the agent scope's own service isolation, so
+ * a preset-scoped registry receives the skills. Application is all-or-nothing:
+ * a failure disposes every registration this call already made before the
+ * error propagates. The caller owns the returned disposer; disposing it
+ * removes every registration this call made.
  * @param agentCtx - the agent's scoped context.
  * @param artifacts - validated artifact set to apply.
  * @param order - prompt-section sort order for the distilled policy.
  * @returns the combined disposer, disposing registrations in reverse order.
+ * @throws Error when the set carries skills but the agent scope composes no skill registry, or when a registration fails.
  */
 export function applyArtifacts(agentCtx: Context, artifacts: RsiArtifacts, order: number): () => void {
+  const registry = agentCtx.get('skills')
+  const first = artifacts.skills[0]
+  if (first !== undefined && registry === undefined) {
+    throw new Error(`dual-core RSI cannot apply distilled skill "${first.name}": the agent scope composes no skill registry; mount @deepseek-ai/dsh-skill or set maxSkills: 0`)
+  }
   const disposers: (() => void)[] = []
-  const text = renderPolicySection(artifacts)
-  if (text !== undefined) {
-    disposers.push(agentCtx.systemPrompt.section({ name: RSI_DISTILLED_POLICY_SECTION, order, text }))
-  }
-  for (const skill of artifacts.skills) {
-    disposers.push(agentCtx.skills.register({
-      name: skill.name,
-      description: skill.description,
-      content: skill.content,
-      source: 'runtime',
-    }))
-  }
-  return () => {
+  const disposeAll = (): void => {
     for (const dispose of disposers.reverse()) dispose()
   }
+  try {
+    const text = renderPolicySection(artifacts)
+    if (text !== undefined) {
+      disposers.push(agentCtx.systemPrompt.section({ name: RSI_DISTILLED_POLICY_SECTION, order, text }))
+    }
+    if (registry !== undefined) {
+      for (const skill of artifacts.skills) {
+        disposers.push(registry.register({
+          name: skill.name,
+          description: skill.description,
+          content: skill.content,
+          source: 'runtime',
+        }))
+      }
+    }
+  } catch (error) {
+    disposeAll()
+    throw error
+  }
+  return disposeAll
 }
 
 /**

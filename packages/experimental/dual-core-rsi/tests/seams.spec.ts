@@ -1,12 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionStore, SessionId } from '@deepseek-ai/dsh-session'
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { SubagentRsiDistiller, RsiDistiller } from '../src/distiller.ts'
 import { FixtureRsiBenchmark, resolveFixtureCases } from '../src/benchmark.ts'
-import { artifactsEqual, decodeArtifacts, formatPercent, normalizeRationale, renderPolicySection } from '../src/policy.ts'
+import { applyArtifacts, artifactsEqual, decodeArtifacts, formatPercent, normalizeRationale, renderPolicySection } from '../src/policy.ts'
 import {
   renderCycleRecord, renderDeclineResult, renderExitSummary, renderGeneration, renderHistory,
   renderKnowledge, renderMergeResult, renderRollback, renderStatus,
@@ -36,25 +37,32 @@ const BUDGETS: RsiArtifactBudgets = {
 describe('decodeArtifacts', () => {
   it('decodes a valid proposal', () => {
     const artifacts = decodeArtifacts({
-      guidance: ['run focused tests'],
-      skills: [{ name: 'commit-check', description: 'checks commits', content: 'Read the diff before committing.' }],
+      guidance: ['run focused tests', '  mind the trailing whitespace  \n'],
+      skills: [{ name: 'commit-check', description: ' checks commits ', content: 'Read the diff before committing.\n' }],
     }, BUDGETS)
-    expect(artifacts.guidance).toEqual(['run focused tests'])
+    // Model-JSON string fields arrive trimmed: surrounding whitespace is
+    // formatting noise the model wraps structured fields in, never policy.
+    expect(artifacts.guidance).toEqual(['run focused tests', 'mind the trailing whitespace'])
     expect(artifacts.skills[0]!.name).toBe('commit-check')
+    expect(artifacts.skills[0]!.description).toBe('checks commits')
+    expect(artifacts.skills[0]!.content).toBe('Read the diff before committing.')
   })
 
-  it('rejects shape, normalization, name, and budget violations', () => {
+  it('rejects shape, emptiness, name, and budget violations', () => {
     expect(() => decodeArtifacts(null, BUDGETS)).toThrow(/must be an object/)
     expect(() => decodeArtifacts({ guidance: 'x', skills: [] }, BUDGETS)).toThrow(/guidance and skills arrays/)
-    expect(() => decodeArtifacts({ guidance: ['  '], skills: [] }, BUDGETS)).toThrow(/normalized/)
+    expect(() => decodeArtifacts({ guidance: ['  '], skills: [] }, BUDGETS)).toThrow(/non-empty/)
+    expect(() => decodeArtifacts({ guidance: [5], skills: [] }, BUDGETS)).toThrow(/non-empty/)
     expect(() => decodeArtifacts({ guidance: ['x'.repeat(41)], skills: [] }, BUDGETS)).toThrow(/maxGuidanceLineChars/)
     expect(() => decodeArtifacts({ guidance: ['a', 'b', 'c', 'd', 'e'], skills: [] }, BUDGETS)).toThrow(/maxGuidanceLines/)
     expect(() => decodeArtifacts({ guidance: ['x'.repeat(34), 'y'.repeat(34), 'z'.repeat(34)], skills: [] }, BUDGETS)).toThrow(/maxGuidanceChars/)
     expect(() => decodeArtifacts({ guidance: [], skills: [{ name: 'Bad_Name', description: 'd', content: 'c' }] }, BUDGETS)).toThrow(/kebab-case/)
     expect(() => decodeArtifacts({ guidance: [], skills: [{ name: 5, description: 'd', content: 'c' }] }, BUDGETS)).toThrow(/kebab-case/)
     expect(() => decodeArtifacts({ guidance: [], skills: [5] }, BUDGETS)).toThrow(/skill artifact must be an object/)
-    expect(() => decodeArtifacts({ guidance: [], skills: [{ name: 'ok', description: 'd', content: 5 }] }, BUDGETS)).toThrow(/non-empty normalized/)
-    expect(() => decodeArtifacts({ guidance: [], skills: [{ name: 'ok', description: '', content: 'c' }] }, BUDGETS)).toThrow(/non-empty normalized/)
+    expect(() => decodeArtifacts({ guidance: [], skills: [{ name: 'ok', description: 'd', content: 5 }] }, BUDGETS)).toThrow(/non-empty/)
+    expect(() => decodeArtifacts({ guidance: [], skills: [{ name: 'ok', description: '', content: 'c' }] }, BUDGETS)).toThrow(/non-empty/)
+    expect(() => decodeArtifacts({ guidance: [], skills: [{ name: 'ok', description: '  ', content: 'c' }] }, BUDGETS)).toThrow(/non-empty/)
+    expect(() => decodeArtifacts({ guidance: [], skills: [{ name: 'ok', description: 5, content: 'c' }] }, BUDGETS)).toThrow(/non-empty/)
     expect(() => decodeArtifacts({ guidance: [], skills: [{ name: 'ok', description: 'x'.repeat(31), content: 'c' }] }, BUDGETS)).toThrow(/maxSkillDescriptionChars/)
     expect(() => decodeArtifacts({ guidance: [], skills: [{ name: 'ok', description: 'd', content: 'x'.repeat(61) }] }, BUDGETS)).toThrow(/maxSkillContentChars/)
     expect(() => decodeArtifacts({ guidance: [], skills: [
@@ -67,6 +75,65 @@ describe('decodeArtifacts', () => {
       { name: 'c', description: 'd', content: 'c' },
     ] }, BUDGETS)).toThrow(/maxSkills/)
     expect(() => decodeArtifacts({ guidance: [], skills: [{ name: 'ok', description: 'd', content: 'c', extra: 1 }] }, BUDGETS)).toThrow(/unexpected field/)
+  })
+})
+
+describe('applyArtifacts', () => {
+  const SKILLED: RsiArtifacts = {
+    guidance: ['be terse'],
+    skills: [
+      { name: 'first', description: 'd', content: 'c' },
+      { name: 'second', description: 'd', content: 'c' },
+    ],
+  }
+
+  async function promptContext(): Promise<{ ctx: Context; live: Set<string> }> {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const live = new Set<string>()
+    const section = ctx.systemPrompt.section.bind(ctx.systemPrompt)
+    vi.spyOn(ctx.systemPrompt, 'section').mockImplementation((entry) => {
+      const dispose = section(entry)
+      live.add(entry.name)
+      return () => {
+        live.delete(entry.name)
+        dispose()
+      }
+    })
+    return { ctx, live }
+  }
+
+  it('fails before registering anything when skills meet no skill registry', async () => {
+    const { ctx, live } = await promptContext()
+    expect(() => applyArtifacts(ctx, SKILLED, 0)).toThrow(/cannot apply distilled skill "first".*no skill registry/)
+    expect(live.size).toBe(0)
+    // Guidance alone needs no registry.
+    const dispose = applyArtifacts(ctx, { guidance: ['be terse'], skills: [] }, 0)
+    expect(live.size).toBe(1)
+    dispose()
+    expect(live.size).toBe(0)
+    await ctx.fiber.dispose()
+  })
+
+  it('disposes every registration it made when a later registration fails', async () => {
+    const { ctx, live } = await promptContext()
+    const registered = new Set<string>()
+    class RejectingSkills extends Service {
+      constructor(ctx2: Context) {
+        super(ctx2, 'skills')
+      }
+
+      register(skill: { name: string }): () => void {
+        if (skill.name === 'second') throw new Error('registry rejected second')
+        registered.add(skill.name)
+        return () => { registered.delete(skill.name) }
+      }
+    }
+    void new RejectingSkills(ctx)
+    expect(() => applyArtifacts(ctx, SKILLED, 0)).toThrow('registry rejected second')
+    expect([...registered]).toEqual([])
+    expect(live.size).toBe(0)
+    await ctx.fiber.dispose()
   })
 })
 
@@ -452,6 +519,12 @@ describe('assembleDigest and freshness', () => {
     const ctx = await mount()
     const live = ctx.sessions.create(SessionId('live-now'))
     appendTurn(live, 'live session asks to verify the migration')
+    // A live delegated child (the daemon's own distillation child among them)
+    // is never user-core evidence, even while it is the newest live session.
+    const liveChild = ctx.sessions.create(SessionId('live-child'), {
+      meta: { origin: 'subagent', parentSession: SessionId('live-now'), delegationDepth: 1 },
+    })
+    appendTurn(liveChild, 'daemon child proposes its own policy')
     // The closed session lives only in storage: its events come from a detached context.
     const storedCtx = await mount()
     const storedSession = storedCtx.sessions.create(SessionId('stored-old'))
@@ -464,9 +537,11 @@ describe('assembleDigest and freshness', () => {
         super(ctx2, 'sessionQuery')
       }
 
-      listSessions(): Promise<{ header: { id: string }; live: boolean }[]> {
+      listSessions(): Promise<{ header: { id: string; origin?: 'subagent' }; live: boolean }[]> {
         return Promise.resolve([
           { header: { id: 'live-now' }, live: true },
+          // A closed delegated child listed newest would otherwise take the free slot.
+          { header: { id: 'stored-child', origin: 'subagent' }, live: false },
           { header: { id: 'stored-old' }, live: false },
           { header: { id: 'stored-old' }, live: false },
           { header: { id: 'stored-empty' }, live: false },
@@ -475,7 +550,7 @@ describe('assembleDigest and freshness', () => {
       }
 
       readSession(id: string): Promise<{ events: unknown[] }> {
-        if (id === 'stored-old') return Promise.resolve({ events: storedEvents })
+        if (id === 'stored-old' || id === 'stored-child') return Promise.resolve({ events: storedEvents })
         return Promise.resolve({ events: [] })
       }
     }
@@ -502,6 +577,11 @@ describe('assembleDigest and freshness', () => {
     const ctx = await mount()
     const early = ctx.sessions.create(SessionId('early'))
     appendTurn(early, 'before adoption')
+    // A delegated child's fresh activity never makes the policy stale.
+    const child = ctx.sessions.create(SessionId('early-child'), {
+      meta: { origin: 'subagent', parentSession: SessionId('early'), delegationDepth: 1 },
+    })
+    appendTurn(child, 'child activity')
     // A policy adopted far in the past has not seen the session; one adopted in the future has.
     expect(countUnseenSessions(ctx, 1)).toBe(1)
     expect(countUnseenSessions(ctx, Date.now() + 60_000)).toBe(0)

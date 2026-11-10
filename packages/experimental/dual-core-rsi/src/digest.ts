@@ -128,9 +128,28 @@ export interface DigestLimits {
 /** Structural subset of `ctx.sessionQuery` the digest reader consumes. */
 export interface DigestSessionQuery {
   /** Newest-first session records across the live-preferred corpus. */
-  listSessions(signal?: AbortSignal): Promise<readonly { readonly header: { readonly id: string }; readonly live: boolean }[]>
+  listSessions(signal?: AbortSignal): Promise<readonly { readonly header: DigestSessionHeader; readonly live: boolean }[]>
   /** Replay-validated snapshot of one session's complete event log. */
   readSession(id: string): Promise<{ readonly events: readonly SessionEvent[] }>
+}
+
+/** Header fields the digest reader classifies a session by. */
+export interface DigestSessionHeader {
+  readonly id: string
+  /** `subagent` marks a delegated child session, never user-core evidence. */
+  readonly origin?: 'subagent' | undefined
+}
+
+/**
+ * Whether a session is user-core evidence. Delegated subagent sessions are
+ * not: their parent session already records the delegation and its result,
+ * and the daemon's own distillation children would otherwise feed every
+ * proposal back into the next cycle's digest.
+ * @param header - the session header to classify.
+ * @returns whether the session belongs to the user core.
+ */
+export function isUserCoreSession(header: DigestSessionHeader): boolean {
+  return header.origin !== 'subagent'
 }
 
 /**
@@ -179,10 +198,11 @@ function entryFromSnapshot(sessionId: string, events: readonly SessionEvent[], m
 }
 
 /**
- * Assemble the distillation digest: the newest live sessions with committed
- * events first, then — through `ctx.sessionQuery`, when composed — recent
- * closed sessions fill the remaining slots, so knowledge closed away in old
- * sessions still reaches the distiller. Live sessions always win their slot.
+ * Assemble the distillation digest: the newest live user-core sessions with
+ * committed events first, then — through `ctx.sessionQuery`, when composed —
+ * recent closed user-core sessions fill the remaining slots, so knowledge
+ * closed away in old sessions still reaches the distiller. Live sessions
+ * always win their slot; delegated subagent sessions never take one.
  * @param ctx - service context with `ctx.sessions` and `ctx.sessionProjections` present.
  * @param limits - digest limits resolved from config.
  * @returns the assembled digest; sessions without committed events are skipped.
@@ -191,6 +211,7 @@ export async function assembleDigest(ctx: Context, limits: DigestLimits): Promis
   const liveEntries: RsiSessionDigestEntry[] = []
   const liveIds = new Set<string>()
   for (const session of ctx.sessions.list()) {
+    if (!isUserCoreSession(session.header)) continue
     const state = ctx.sessionProjections.stateOf(session, 'rsiDigest')
     if (state === undefined || state.eventCount === 0) continue
     liveIds.add(session.id)
@@ -210,7 +231,7 @@ export async function assembleDigest(ctx: Context, limits: DigestLimits): Promis
       for (const record of await query.listSessions()) {
         if (entries.length >= limits.maxSessions) break
         const id = record.header.id
-        if (record.live || liveIds.has(id) || storedIds.includes(id)) continue
+        if (record.live || liveIds.has(id) || storedIds.includes(id) || !isUserCoreSession(record.header)) continue
         const snapshot = await query.readSession(id)
         if (snapshot.events.length === 0) continue
         storedIds.push(id)
@@ -222,16 +243,17 @@ export async function assembleDigest(ctx: Context, limits: DigestLimits): Promis
 }
 
 /**
- * Count live sessions whose latest committed event is newer than the given
- * knowledge cutoff: the current policy has not seen that activity, so its
- * knowledge may be stale.
+ * Count live user-core sessions whose latest committed event is newer than
+ * the given knowledge cutoff: the current policy has not seen that activity,
+ * so its knowledge may be stale. Delegated subagent sessions never count.
  * @param ctx - service context with `ctx.sessions` and `ctx.sessionProjections` present.
  * @param cutoffAt - wall-clock knowledge cutoff of the last settled cycle.
- * @returns the number of live sessions with newer activity.
+ * @returns the number of live user-core sessions with newer activity.
  */
 export function countUnseenSessions(ctx: Context, cutoffAt: number): number {
   let unseen = 0
   for (const session of ctx.sessions.list()) {
+    if (!isUserCoreSession(session.header)) continue
     const state = ctx.sessionProjections.stateOf(session, 'rsiDigest')
     if (state === undefined || state.eventCount === 0) continue
     if (state.lastEventAt > cutoffAt) unseen += 1
