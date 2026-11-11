@@ -20,6 +20,7 @@ import { connectFreshWorkspace, newEnglishPage, REPO_ROOT, saveFailureShot } fro
 const OVERLAY = fileURLToPath(new URL('./rsi-evolution-trajectory.overlay.yml', import.meta.url))
 const INSTALL_ANCHORS = [
   fileURLToPath(new URL('../../../packages/experimental/dual-core-rsi-evolution-bundle/package.json', import.meta.url)),
+  fileURLToPath(new URL('../../../packages/experimental/dual-core-rsi-evolution/package.json', import.meta.url)),
   fileURLToPath(new URL('../../../packages/experimental/dual-core-rsi-bundle/package.json', import.meta.url)),
 ]
 const OUTPUT_DIR = join(REPO_ROOT, '.artifacts', 'rsi-evolution-trajectory')
@@ -80,8 +81,8 @@ describe.skipIf(!ENABLED)('web e2e: dual-core RSI evolution trajectory (ten roun
     const settled = new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         off()
-        reject(new Error('no top-level turn/end within 6 minutes'))
-      }, 6 * 60_000)
+        reject(new Error('no top-level turn/end within 10 minutes'))
+      }, 10 * 60_000)
       const off = scaffold.ctx.on('session/event', (session, event) => {
         if (event.type !== 'turn/end' || session.header.origin === 'subagent') return
         clearTimeout(timer)

@@ -30,6 +30,10 @@
       "types": "./lib/types/plugin-replay-distiller.d.ts",
       "default": "./lib/types/plugin-replay-distiller.js"
     },
+    "./trajectory": {
+      "types": "./lib/types/plugin-trajectory.d.ts",
+      "default": "./lib/types/plugin-trajectory.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -45,6 +49,8 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-experimental-dual-core-rsi": "workspace:*",
+    "@deepseek-ai/dsh-home-paths": "workspace:*",
+    "@deepseek-ai/dsh-tools": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~",
     "zod": "4.4.3"
   },

@@ -8891,6 +8891,12 @@ importers:
       '@deepseek-ai/dsh-experimental-dual-core-rsi':
         specifier: workspace:*
         version: link:../dual-core-rsi
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../util/home-paths
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery

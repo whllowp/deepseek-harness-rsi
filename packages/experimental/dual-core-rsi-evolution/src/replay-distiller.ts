@@ -69,7 +69,7 @@ function formatScore(score: number): string {
  * record (the proposal for future joins) after.
  */
 export class ReplayRsiDistiller extends RsiDistiller {
-  static inject = ['rsiEvolutionLedger', 'subagents']
+  static inject = ['rsiEvolutionLedger', 'subagents', 'agents']
 
   static Config: z<ReplayDistillerConfig> = z.object({
     subagentProvider: z.string().default('spawn'),
@@ -111,13 +111,16 @@ export class ReplayRsiDistiller extends RsiDistiller {
     if (this.innerStarted) return
     this.innerStarted = true
     // The shipped distiller provides under the same service name, so it
-    // cannot mount beside this provider. A detached context carries it:
-    // its only tree dependency, the subagents seam, is forwarded, and the
-    // detached fiber disposes with this service.
+    // cannot mount beside this provider. A detached context carries it: the
+    // subagents seam AND the agents registry (the subagent manager's
+    // exact-live-parent check resolves the registry through its own context)
+    // are forwarded onto it, and the detached fiber disposes with this
+    // service.
     /* jscpd:ignore-start -- the two providers share the detached-inner bootstrap shape; each mounts a different inner */
     const detached = new Context()
     this.ctx.effect(() => () => { void detached.fiber.dispose() }, 'replay distiller: inner lifetime')
     detached.provide('subagents', this.ctx.subagents)
+    detached.provide('agents', this.ctx.agents)
     await detached.plugin(SubagentRsiDistiller, { subagentProvider: this.providerName })
     const inner = detached.rsiDistiller
     this.distillInner = (input, options) => inner.distill(input, options)
