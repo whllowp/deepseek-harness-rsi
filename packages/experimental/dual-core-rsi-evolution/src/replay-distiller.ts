@@ -114,12 +114,14 @@ export class ReplayRsiDistiller extends RsiDistiller {
     // cannot mount beside this provider. A detached context carries it:
     // its only tree dependency, the subagents seam, is forwarded, and the
     // detached fiber disposes with this service.
+    /* jscpd:ignore-start -- the two providers share the detached-inner bootstrap shape; each mounts a different inner */
     const detached = new Context()
     this.ctx.effect(() => () => { void detached.fiber.dispose() }, 'replay distiller: inner lifetime')
     detached.provide('subagents', this.ctx.subagents)
     await detached.plugin(SubagentRsiDistiller, { subagentProvider: this.providerName })
     const inner = detached.rsiDistiller
     this.distillInner = (input, options) => inner.distill(input, options)
+    /* jscpd:ignore-end */
   }
 
   /**

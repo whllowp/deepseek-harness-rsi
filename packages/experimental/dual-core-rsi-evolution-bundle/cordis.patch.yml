@@ -44,6 +44,10 @@
         subagentProvider: spawn
         maxLessons: 3
         minSamples: 2
+    - id: dual-core-rsi-evolution-trajectory
+      name: '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/trajectory'
+      config:
+        rounds: 10
     - id: dual-core-rsi
       name: '@deepseek-ai/dsh-experimental-dual-core-rsi'
       config:

@@ -184,6 +184,7 @@
     "tests/agent-team-panel.e2e.ts",
     "tests/rsi-sidebar-panel.e2e.ts",
     "tests/rsi-knowledge-ab.e2e.ts",
+    "tests/rsi-evolution-trajectory.e2e.ts",
     "tests/sidebar-right.e2e.ts",
     "tests/sidebar-terminal.e2e.ts",
     "tests/startup-auto-selection.e2e.ts",

@@ -15,6 +15,7 @@ import {
 import type {
   FixtureCase, RsiBenchmarkCaseResult, RsiBenchmarkReport, RsiBenchmarkRequest,
 } from '@deepseek-ai/dsh-experimental-dual-core-rsi'
+import type { ObjectiveAttainment } from './domain.ts'
 
 /** One configured objective: a named family of benchmark cases with its weight. */
 export interface HarmonyObjectiveConfig {
@@ -146,11 +147,13 @@ export class HarmonyRsiBenchmark extends RsiBenchmark {
     // The shipped fixture provides under the same service name, so it cannot
     // mount beside this provider; its evaluation touches no tree service, so
     // a detached context carries it and disposes with this service.
+    /* jscpd:ignore-start -- the two providers share the detached-inner bootstrap shape; each mounts a different inner */
     const detached = new Context()
     this.ctx.effect(() => () => { void detached.fiber.dispose() }, 'Harmony benchmark: inner lifetime')
     await detached.plugin(FixtureRsiBenchmark, { cases: [...this.cases] })
     const inner = detached.rsiBenchmark
     this.evaluateInner = (request, signal) => inner.evaluate(request, signal)
+    /* jscpd:ignore-end */
   }
 
   /**
@@ -166,19 +169,16 @@ export class HarmonyRsiBenchmark extends RsiBenchmark {
     const summaries: RsiBenchmarkCaseResult[] = []
     let shortfall = 0
     for (const objective of this.objectives) {
-      const family = [...objective.caseNames].map(name => byName.get(name)).filter(item => item !== undefined)
-      const totalWeight = family.reduce((sum, item) => sum + item.weight, 0)
-      const passedWeight = family.reduce((sum, item) => sum + (item.passed ? item.weight : 0), 0)
-      // A family whose cases are absent carries no pressure (attainment 1).
-      const attainment = totalWeight === 0 ? 1 : passedWeight / totalWeight
+      const attainment = this.attainment(objective, byName)
       shortfall = Math.max(shortfall, objective.weight * (1 - attainment))
+      const totalWeight = this.familyWeight(objective, byName)
       summaries.push({
         name: `objective:${objective.name}`,
         passed: attainment === 1,
         weight: objective.weight,
         detail: totalWeight === 0
           ? `no cases of objective "${objective.name}" appeared in this evaluation; attainment defaults to 100%`
-          : `${passedWeight}/${totalWeight} weight passed; attainment ${(attainment * 100).toFixed(1)}%, weight ${objective.weight}`,
+          : `${Math.round(totalWeight * attainment)}/${totalWeight} weight passed; attainment ${(attainment * 100).toFixed(1)}%, weight ${objective.weight}`,
       })
     }
     const score = Math.min(1, Math.max(0, 1 - shortfall))
@@ -197,5 +197,43 @@ export class HarmonyRsiBenchmark extends RsiBenchmark {
       this.ctx.logger.warn(`Harmony benchmark: replay ledger score write failed: ${error instanceof Error ? error.message : String(error)}`)
     }
     return report
+  }
+
+  /**
+   * The objective attainments of one persisted report: the families this
+   * provider was configured with, recomputed from the report's own cases.
+   * Trajectory consumers read the evolution direction from here.
+   * @param report - a report this provider (or a composition-equal one) produced.
+   * @returns one attainment per configured objective, in configuration order.
+   */
+  objectiveAttainments(report: RsiBenchmarkReport): readonly ObjectiveAttainment[] {
+    const byName = new Map(report.cases.map(item => [item.name, item]))
+    return this.objectives.map(objective => ({
+      name: objective.name,
+      attainment: this.attainment(objective, byName),
+      weight: objective.weight,
+    }))
+  }
+
+  /** One family's attainment: passed weight over total weight among the family's present cases. */
+  private attainment(objective: ResolvedObjective, byName: Map<string, RsiBenchmarkCaseResult>): number {
+    const totalWeight = this.familyWeight(objective, byName)
+    if (totalWeight === 0) return 1
+    let passedWeight = 0
+    for (const name of objective.caseNames) {
+      const item = byName.get(name)
+      if (item !== undefined && item.passed) passedWeight += item.weight
+    }
+    return passedWeight / totalWeight
+  }
+
+  /** One family's total case weight among its present cases. */
+  private familyWeight(objective: ResolvedObjective, byName: Map<string, RsiBenchmarkCaseResult>): number {
+    let totalWeight = 0
+    for (const name of objective.caseNames) {
+      const item = byName.get(name)
+      if (item !== undefined) totalWeight += item.weight
+    }
+    return totalWeight
   }
 }

@@ -38,6 +38,54 @@ const proposalSchema = z.object({
   scoredAt: instantSchema.optional(),
 }).strict()
 
+const objectiveAttainmentSchema = z.object({
+  /** Objective family name. */
+  name: z.string().min(1),
+  /** Family attainment in [0, 1]. */
+  attainment: z.number().min(0).max(1),
+  /** Family weight in the Tchebycheff scalarization. */
+  weight: z.number().positive(),
+}).strict()
+
+/** One objective family attainment snapshot. */
+export interface ObjectiveAttainment {
+  /** Objective family name. */
+  readonly name: string
+  /** Family attainment in [0, 1]. */
+  readonly attainment: number
+  /** Family weight in the Tchebycheff scalarization. */
+  readonly weight: number
+}
+
+const trajectorySchema = z.object({
+  /** 1-based evolution round; the table key. */
+  round: z.number().int().positive(),
+  /** Cycle id this round settled, when the controller settled one. */
+  cycleId: z.string().min(1).optional(),
+  /** Active generation id at round start. */
+  activeId: z.string().min(1),
+  /** Candidate generation id the cycle produced, when one was evaluated. */
+  candidateId: z.string().min(1).optional(),
+  /** Round outcome: promoted, retained, pending, or a skip/failure reason. */
+  outcome: z.string().min(1),
+  /** Active policy's benchmark score at round start; absent when unscored. */
+  baselineScore: z.number().min(0).max(1).optional(),
+  /** Candidate score; absent for rounds that evaluated nothing. */
+  candidateScore: z.number().min(0).max(1).optional(),
+  /** Per-objective attainments of the active policy after the round. */
+  objectives: z.array(objectiveAttainmentSchema),
+  /** Objective with the largest weighted shortfall — the Tchebycheff pressure direction. */
+  pressureObjective: z.string().min(1).optional(),
+  /** Replay-ledger rows at round end. */
+  ledgerRows: z.number().int().nonnegative(),
+  /** Long-term knowledge entries at round end. */
+  knowledgeRows: z.number().int().nonnegative(),
+  /** One-line round note (rationale, skip reason, or error). */
+  note: z.string().min(1),
+  /** Safe-integer epoch milliseconds at round settlement. */
+  settledAt: instantSchema,
+}).strict()
+
 /**
  * Authoritative evolution-plugin storage; malformed records reject opening
  * the domain. Fingerprints are structural artifact hashes, so re-proposing
@@ -48,8 +96,12 @@ export const rsiEvolutionDomain = defineDomain({
   version: 1,
   tables: {
     proposals: domainTable<string, RsiReplayProposal>(proposalSchema),
+    trajectory: domainTable<string, RsiTrajectoryRound>(trajectorySchema),
   },
 })
 
 /** One replay-ledger record: a distilled content and the score it earned. */
 export type RsiReplayProposal = z.infer<typeof proposalSchema>
+
+/** One recorded evolution round: the cycle outcome with its objective shape. */
+export type RsiTrajectoryRound = z.infer<typeof trajectorySchema>

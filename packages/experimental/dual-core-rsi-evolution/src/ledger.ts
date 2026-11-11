@@ -13,7 +13,7 @@ import z from '@deepseek-ai/schemastery'
 import type { RsiArtifacts } from '@deepseek-ai/dsh-experimental-dual-core-rsi'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import { rsiEvolutionDomain } from './domain.ts'
-import type { RsiReplayProposal } from './domain.ts'
+import type { RsiReplayProposal, RsiTrajectoryRound } from './domain.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -97,6 +97,19 @@ export abstract class RsiEvolutionLedger extends Service {
    * @returns the bounded ledger rows.
    */
   abstract entries(): Promise<readonly RsiReplayProposal[]>
+
+  /**
+   * Settle one evolution trajectory round.
+   * @param round - the settled round record.
+   * @returns resolution when the row is durable.
+   */
+  abstract recordRound(round: RsiTrajectoryRound): Promise<void>
+
+  /**
+   * Every recorded trajectory round, oldest first.
+   * @returns the bounded round rows.
+   */
+  abstract trajectoryRounds(): Promise<readonly RsiTrajectoryRound[]>
 }
 
 function proposalFacts(artifacts: RsiArtifacts, observation: {
@@ -211,5 +224,25 @@ export class DomainReplayLedger extends RsiEvolutionLedger {
     await this.readyPromise
     return [...this.proposalsTable().entries()].map(([, proposal]) => proposal)
       .sort((a, b) => a.firstDistilledAt - b.firstDistilledAt)
+  }
+
+  /** The opened trajectory table; every caller has awaited readiness. */
+  private trajectoryTable() {
+    /* v8 ignore next -- initialize() always assigns before waitReady() resolves */
+    if (this.domain === undefined) throw new TypeError('the replay ledger domain is not open')
+    return this.domain.table('trajectory')
+  }
+
+  /** @inheritdoc */
+  async recordRound(round: RsiTrajectoryRound): Promise<void> {
+    await this.readyPromise
+    await this.trajectoryTable().put(String(round.round), round)
+  }
+
+  /** @inheritdoc */
+  async trajectoryRounds(): Promise<readonly RsiTrajectoryRound[]> {
+    await this.readyPromise
+    return [...this.trajectoryTable().entries()].map(([, round]) => round)
+      .sort((a, b) => a.round - b.round)
   }
 }

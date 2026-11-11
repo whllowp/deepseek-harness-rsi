@@ -191,6 +191,7 @@
     "apps/web/tests/agent-team-panel.e2e.ts",
     "apps/web/tests/rsi-sidebar-panel.e2e.ts",
     "apps/web/tests/rsi-knowledge-ab.e2e.ts",
+    "apps/web/tests/rsi-evolution-trajectory.e2e.ts",
     "apps/web/tests/sidebar-right.e2e.ts",
     "apps/web/tests/sidebar-terminal.e2e.ts",
     "apps/web/tests/chat-scroll-fixture.ts",

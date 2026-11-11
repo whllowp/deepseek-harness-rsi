@@ -41,6 +41,7 @@
       "@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/evolution-ledger": ["./packages/experimental/dual-core-rsi-evolution/src/plugin-evolution-ledger.ts"],
       "@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/harmony-benchmark": ["./packages/experimental/dual-core-rsi-evolution/src/plugin-harmony-benchmark.ts"],
       "@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/replay-distiller": ["./packages/experimental/dual-core-rsi-evolution/src/plugin-replay-distiller.ts"],
+      "@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/trajectory": ["./packages/experimental/dual-core-rsi-evolution/src/plugin-trajectory.ts"],
       "@deepseek-ai/dsh-experimental-dual-core-rsi-evolution-bundle": ["./packages/experimental/dual-core-rsi-evolution-bundle/src/index.ts"],
       "@deepseek-ai/dsh-experimental-terminal-bundle": ["./packages/experimental/terminal-bundle/src/index.ts"],
       "@deepseek-ai/dsh-experimental-badge-skill-bundle": ["./packages/experimental/badge-skill-bundle/src/index.ts"],

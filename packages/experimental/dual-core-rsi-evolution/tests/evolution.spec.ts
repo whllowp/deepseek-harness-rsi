@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -7,21 +7,25 @@ import { createInboxStub } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import type { Scope, ScopeKey } from '@deepseek-ai/dsh-scope'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
+import ToolRuntime from '@deepseek-ai/dsh-tools'
 import Storage from '@deepseek-ai/dsh-storage'
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import * as storageDomainPlugin from '@deepseek-ai/dsh-storage-domain'
 import * as storageJson from '@deepseek-ai/dsh-storage-json'
 import {
-  RsiBenchmark, RsiDistiller, RsiGenerationId, RsiKnowledgeId,
+  RsiBenchmark, RsiCycleId, RsiDistiller, RsiGenerationId, RsiKnowledgeId,
 } from '@deepseek-ai/dsh-experimental-dual-core-rsi'
 import type {
-  RsiArtifacts, RsiBenchmarkReport, RsiBenchmarkRequest, RsiDistillInput, RsiDistillOptions,
-  RsiDistillOutput, RsiGeneration,
+  RsiArtifacts, RsiBenchmarkReport, RsiBenchmarkRequest, RsiCycleRecord, RsiDistillInput,
+  RsiDistillOptions, RsiDistillOutput, RsiGeneration, RsiStatusView,
 } from '@deepseek-ai/dsh-experimental-dual-core-rsi'
-import type { HarmonyBenchmarkConfig, ReplayDistillerConfig } from '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution'
+import type {
+  HarmonyBenchmarkConfig, ReplayDistillerConfig, TrajectoryConfig,
+} from '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  DomainReplayLedger, HarmonyRsiBenchmark, ReplayRsiDistiller, RsiEvolutionLedger,
-  artifactsFingerprint, rsiEvolutionDomain,
+  DomainEvolutionTrajectory, DomainReplayLedger, HarmonyRsiBenchmark, ReplayRsiDistiller,
+  RsiEvolutionLedger, artifactsFingerprint, rsiEvolutionDomain,
 } from '../src/index.ts'
 import * as ledgerEntry from '../src/plugin-evolution-ledger.ts'
 import * as harmonyEntry from '../src/plugin-harmony-benchmark.ts'
@@ -144,6 +148,14 @@ class ThrowingLedger extends RsiEvolutionLedger {
   }
 
   async entries(): Promise<readonly never[]> {
+    return []
+  }
+
+  async recordRound(): Promise<void> {
+    throw new Error('ledger round write down')
+  }
+
+  async trajectoryRounds(): Promise<readonly never[]> {
     return []
   }
 }
@@ -593,6 +605,360 @@ describe('ReplayRsiDistiller', () => {
     expect(test.ctx.rsiDistiller).toBeInstanceOf(ReplayRsiDistiller)
     await expect(distiller.distill(distillInput(EMPTY), await options(test.ctx)))
       .rejects.toThrow(/provider "spawn" is not registered/)
+  })
+})
+
+describe('DomainEvolutionTrajectory', () => {
+  /** The active status the stub controller reports; `call` is the settled cycle count. */
+  function statusView(activeId: string, score: number | undefined, economyPassed: boolean): RsiStatusView {
+    return {
+      active: {
+        ...generation(activeId, artifacts(['current policy']), score),
+        // A benchmark-less policy (score undefined) exposes no benchmark, so
+        // the trajectory records a round with no objective shape.
+        ...(score === undefined ? {} : {
+          benchmark: {
+            provider: 'harmony:stub', scoredAt: 1,
+            score: economyPassed ? 1 : 0.75,
+            cases: [
+              { name: 'runs-tests-before-done', passed: true, weight: 2, detail: 'passed' },
+              { name: 'concise-policy', passed: economyPassed, weight: 1, detail: economyPassed ? 'passed' : 'too long' },
+              { name: 'objective:verification', passed: true, weight: 0.5, detail: '100%' },
+              { name: 'objective:economy', passed: economyPassed, weight: 0.5, detail: economyPassed ? '100%' : '0%' },
+            ],
+          },
+        }),
+      },
+      daemon: generation('gen-daemon', EMPTY),
+      threshold: 0.05,
+      daemonEnabled: true,
+      mergePolicy: 'auto',
+      cycleRunning: false,
+      archiveCount: 0,
+      incidents: [],
+      unseenSessionCount: 0,
+    } as unknown as RsiStatusView
+  }
+
+  interface ScriptedCycle { record?: RsiCycleRecord; error?: Error; knowledgeRows?: number; benchmarkless?: boolean }
+
+  /** Controller stub: scripted cycle outcomes, live status, and a visible knowledge count. */
+  class StubController extends Service {
+    readonly runCalls: string[] = []
+    private knowledgeRows = 0
+    private lastFailed = false
+
+    constructor(ctx: Context, private readonly script: (call: number) => ScriptedCycle) {
+      super(ctx, 'dualCoreRsi')
+    }
+
+    async status(): Promise<RsiStatusView> {
+      // After a failed cycle the policy has no benchmark until the next
+      // success, so the trajectory records a benchmark-less round.
+      if (this.lastFailed) return statusView('gen-1', undefined, true)
+      const call = this.runCalls.length
+      const { error } = this.script(call)
+      if (error !== undefined) return statusView('gen-1', undefined, true)
+      return statusView(`gen-${String(call + 1)}`, call === 0 ? 0.2 : 0.6, call >= 1)
+    }
+
+    async runCycle(_trigger: 'command', _signal: AbortSignal): Promise<RsiCycleRecord> {
+      this.runCalls.push(`call-${String(this.runCalls.length + 1)}`)
+      const { record, error, knowledgeRows } = this.script(this.runCalls.length)
+      if (knowledgeRows !== undefined) this.knowledgeRows = knowledgeRows
+      if (error !== undefined) {
+        this.lastFailed = true
+        throw error
+      }
+      this.lastFailed = false
+      if (record !== undefined) return record
+      return {
+        id: RsiCycleId(`cycle-${String(this.runCalls.length)}`),
+        trigger: 'command',
+        startedAt: 1,
+        settledAt: 2,
+        outcome: 'promoted',
+        baselineScore: 0.2,
+        candidateScore: 0.6,
+        improvement: 0.4,
+        threshold: 0.05,
+        candidateId: RsiGenerationId(`gen-${String(this.runCalls.length + 1)}`),
+        rationale: 'the balanced objective shape improved',
+      }
+    }
+
+    async history(_limit: number): Promise<{ knowledge: readonly unknown[] }> {
+      return { knowledge: Array.from({ length: this.knowledgeRows }, () => ({})) }
+    }
+  }
+
+  interface TrajectoryHarness {
+    readonly ctx: Context
+    readonly ledger: DomainReplayLedger
+    readonly trajectory: DomainEvolutionTrajectory
+    readonly root: string
+    readonly dir: string
+    /** Tool registrations captured by the stub registry (stubTools mode). */
+    readonly registeredTools: unknown[]
+  }
+
+  async function trajectoryHarness(
+    script: (call: number) => ScriptedCycle,
+    config?: TrajectoryConfig,
+    options?: { stubTools?: boolean; plainBenchmark?: boolean },
+  ): Promise<TrajectoryHarness> {
+    const ctx = new Context()
+    const root = await mkdtemp(join(tmpdir(), 'rsi-trajectory-'))
+    const dir = join(root, 'trajectory-log')
+    await ctx.plugin(Storage)
+    await ctx.plugin(storageJson, { root })
+    await ctx.plugin(storageDomainPlugin, { backend: 'json' })
+    await ctx.plugin(SessionStore)
+    const registeredTools: unknown[] = []
+    if (options?.stubTools === true) {
+      // The stub must provide before the trajectory service starts: init
+      // registers its tools during construction.
+      await ctx.plugin(Object.assign((inner: Context) => {
+        inner.provide('tools', { register: (tool: unknown) => { registeredTools.push(tool) } })
+      }, { inject: [] }))
+    } else {
+      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(ToolRuntime)
+    }
+    const ledger = new DomainReplayLedger(ctx, {})
+    await ledger.waitReady()
+    void new StubController(ctx, script)
+    const innerReport = (): RsiBenchmarkReport => ({
+      provider: 'stub', scoredAt: 1, score: 2 / 3, cases: [
+        { name: 'runs-tests-before-done', passed: true, weight: 2, detail: 'passed' },
+        { name: 'concise-policy', passed: true, weight: 1, detail: 'passed' },
+      ],
+    })
+    if (options?.plainBenchmark === true) {
+      class PlainBenchmark extends RsiBenchmark {
+        async evaluate(_request: RsiBenchmarkRequest, _signal: AbortSignal): Promise<RsiBenchmarkReport> {
+          return { provider: 'plain', scoredAt: 1, score: 0.5, cases: [] }
+        }
+      }
+      void new PlainBenchmark(ctx)
+    } else {
+      void new HarmonyRsiBenchmark(ctx, {
+        cases: [{ name: 'runs-tests-before-done', weight: 2 }, { name: 'concise-policy', weight: 1 }],
+        objectives: [
+          { name: 'verification', weight: 0.5, cases: ['runs-tests-before-done'] },
+          { name: 'economy', weight: 0.5, cases: ['concise-policy'] },
+        ],
+      }, new StubInnerBenchmark(ctx.isolate('rsiBenchmark'), innerReport()))
+    }
+    const trajectory = new DomainEvolutionTrajectory(ctx, { ...config, trajectoryDir: dir })
+    await trajectory.waitReady()
+    return { ctx, ledger, trajectory, root, dir, registeredTools }
+  }
+
+  it('rejects invalid configuration at load', () => {
+    const ctx = new Context()
+    tracked(ctx, '')
+    expect(() => new DomainEvolutionTrajectory(ctx, { rounds: 0 })).toThrow(/rounds/)
+    expect(() => new DomainEvolutionTrajectory(ctx, { rounds: 2.5 })).toThrow(/rounds/)
+    expect(() => new DomainEvolutionTrajectory(ctx, { trajectoryDir: ' ' })).toThrow(/trajectoryDir/)
+    expect(() => new DomainEvolutionTrajectory(ctx, { trajectoryDir: '' })).toThrow(/trajectoryDir/)
+  })
+
+  it('records every round with scores, objective attainments, and the pressure direction', async () => {
+    const cycles: ScriptedCycle[] = [
+      {
+        record: {
+          id: RsiCycleId('cycle-1'), trigger: 'command', startedAt: 1, settledAt: 2, outcome: 'promoted',
+          baselineScore: 0.75, candidateScore: 0.9, improvement: 0.15, threshold: 0.05,
+          candidateId: RsiGenerationId('gen-2'), rationale: 'the recovered policy improved further',
+        }, knowledgeRows: 1,
+      },
+      {
+        record: {
+          id: RsiCycleId('cycle-2'), trigger: 'command', startedAt: 1, settledAt: 2, outcome: 'retained',
+          baselineScore: 1, candidateScore: 0.6, improvement: -0.4, threshold: 0.05,
+          candidateId: RsiGenerationId('gen-3'), rationale: 'the balanced policy held',
+        }, knowledgeRows: 2,
+      },
+      { error: new Error('the distiller is offline'), knowledgeRows: 2 },
+      { error: new Error('the distiller is offline again'), knowledgeRows: 2 },
+      { knowledgeRows: 2, benchmarkless: true },
+    ]
+    const test = await trajectoryHarness(call => cycles[call - 1] ?? { knowledgeRows: 2 }, { rounds: 6 })
+    const recorded = await test.trajectory.runRounds()
+    expect(recorded).toHaveLength(6)
+    expect(await test.trajectory.rounds()).toHaveLength(6)
+
+    // r1: promoted with the economy family failing before the round — the
+    // weighted shortfall points the pressure at the economy family, and the
+    // recovering candidate clears the gate with a positive delta.
+    expect(recorded[0]).toMatchObject({
+      round: 1, outcome: 'promoted', baselineScore: 0.75, candidateScore: 0.9,
+      pressureObjective: 'economy', ledgerRows: 0, knowledgeRows: 1,
+    })
+    expect(recorded[0]?.objectives).toEqual([
+      { name: 'verification', attainment: 1, weight: 0.5 },
+      { name: 'economy', attainment: 0, weight: 0.5 },
+    ])
+    // r2: retained with everything at 100% — the pressure ties to the first family.
+    expect(recorded[1]).toMatchObject({ round: 2, outcome: 'retained', baselineScore: 1, candidateScore: 0.6 })
+    expect(recorded[1]?.pressureObjective).toBe('verification')
+    // r3: the controller threw; the round records the failure and continues.
+    expect(recorded[2]).toMatchObject({ round: 3, outcome: 'failed', baselineScore: 1, pressureObjective: 'verification' })
+    expect(recorded[2]?.note).toContain('failed: the distiller is offline')
+    // r4: a second failure whose before-status (the failed r3's own post-status)
+    // has no benchmark, so the round carries no objective shape or scores.
+    expect(recorded[3]).toMatchObject({
+      round: 4, outcome: 'failed', objectives: [], ledgerRows: 0, knowledgeRows: 2,
+    })
+    expect(recorded[3]?.pressureObjective).toBeUndefined()
+    expect(recorded[3]?.baselineScore).toBeUndefined()
+    expect(recorded[3]?.note).toContain('offline again')
+    // r5: the controller recovered onto the benchmark-less policy.
+    expect(recorded[4]).toMatchObject({
+      round: 5, outcome: 'promoted', objectives: [], ledgerRows: 0, knowledgeRows: 2,
+    })
+    expect(recorded[4]?.baselineScore).toBeUndefined()
+    // r6: the benchmark-less cycle succeeded, so the benchmark is back.
+    expect(recorded[5]).toMatchObject({ round: 6, outcome: 'promoted', baselineScore: 1, candidateScore: 0.6 })
+
+    const log = await test.trajectory.renderLog()
+    expect(log).toContain('r1 promoted 0.750→0.900 [verification 100%, economy 0%] pressure=economy')
+    expect(log).toContain('r2 retained 1.000→0.600')
+    expect(log).toContain('r4 failed [')
+    expect(log).toContain('Trajectory log:')
+
+    const topology = await test.trajectory.renderTopology()
+    expect(topology).toContain('flowchart TD')
+    // The lineage graph carries one node per generation with its latest score;
+    // benchmark-less rounds render bare nodes.
+    expect(topology).toContain('gen_gen_1["gen_gen_1"]')
+    expect(topology).toContain('gen_gen_2["gen_gen_2 · 1.000"]')
+    expect(topology).toContain('gen_gen_3["gen_gen_3 · 1.000"]')
+    expect(topology).toContain('gen_gen_1 -->|"r1 promoted +0.150"| gen_gen_2')
+    expect(topology).toContain('gen_gen_2 -->|"r2 retained -0.400"| gen_gen_3')
+    // A failed round loops the active node back on itself without a delta.
+    expect(topology).toContain('gen_gen_3 -->|"r3 failed"| gen_gen_3')
+    expect(topology).toContain('gen_gen_1 -->|"r4 failed"| gen_gen_1')
+    expect(topology).toContain('gen_gen_1 -->|"r5 promoted"| gen_gen_6')
+    expect(topology).toContain('gen_gen_6 -->|"r6 promoted -0.400"| gen_gen_7')
+
+    // The JSONL log landed with one parseable line per round.
+    const jsonl = await readFile(join(test.dir, 'trajectory.jsonl'), 'utf8')
+    const lines = jsonl.trim().split('\n')
+    expect(lines).toHaveLength(6)
+    expect(JSON.parse(lines[2] ?? '{}')).toMatchObject({ round: 3, outcome: 'failed' })
+  })
+
+  it('continues numbering across invocations and reloads rounds from the ledger', async () => {
+    const test = await trajectoryHarness(() => ({ knowledgeRows: 1 }), { rounds: 2 })
+    await test.trajectory.runRounds(2)
+    const more = await test.trajectory.runRounds(1)
+    expect(more[0]?.round).toBe(3)
+    expect(await test.trajectory.rounds()).toHaveLength(3)
+
+    // A remounted service reloads the durable rounds and keeps rendering.
+    const ctx = new Context()
+    tracked(ctx, test.root)
+    await ctx.plugin(Storage)
+    await ctx.plugin(storageJson, { root: test.root })
+    await ctx.plugin(storageDomainPlugin, { backend: 'json' })
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    const ledger = new DomainReplayLedger(ctx, {})
+    await ledger.waitReady()
+    void new StubController(ctx, () => ({ knowledgeRows: 1 }))
+    void new HarmonyRsiBenchmark(ctx, { cases: [{ name: 'verify', weight: 1 }] }, new StubInnerBenchmark(ctx.isolate('rsiBenchmark'), {
+      provider: 'stub', scoredAt: 1, score: 1, cases: [],
+    }))
+    const remounted = new DomainEvolutionTrajectory(ctx, { trajectoryDir: test.dir })
+    await remounted.waitReady()
+    expect(await remounted.rounds()).toHaveLength(3)
+    expect(await remounted.renderLog()).toContain('r1 promoted')
+    // Rounds continue after the remount.
+    const next = await remounted.runRounds(1)
+    expect(next[0]?.round).toBe(4)
+  })
+
+  it('renders the empty-state log and topology before the first round', async () => {
+    const test = await trajectoryHarness(() => ({}))
+    expect(await test.trajectory.renderLog()).toContain('No evolution rounds recorded yet')
+    expect(await test.trajectory.renderTopology()).toContain('No evolution topology yet')
+    expect(await test.trajectory.rounds()).toHaveLength(0)
+  })
+
+  it('aborts a batch between rounds when the signal fires', async () => {
+    const test = await trajectoryHarness(() => ({ knowledgeRows: 1 }))
+    const controller = new AbortController()
+    controller.abort()
+    const recorded = await test.trajectory.runRounds(3, controller.signal)
+    expect(recorded).toHaveLength(0)
+  })
+
+  it('reports an initialization failure when the ledger is absent', async () => {
+    const ctx = new Context()
+    tracked(ctx, '')
+    const error = vi.fn()
+    ctx.logger.error = error
+    const trajectory = new DomainEvolutionTrajectory(ctx, {})
+    await expect(trajectory.waitReady()).rejects.toThrow()
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('rsi evolution trajectory initialization failed'))
+  })
+
+  it('falls back to one overall objective on a non-Harmony benchmark', async () => {
+    const test = await trajectoryHarness(() => ({ knowledgeRows: 1 }), { rounds: 1 }, { plainBenchmark: true })
+    const recorded = await test.trajectory.runRounds(1)
+    expect(recorded[0]?.objectives).toEqual([{ name: 'overall', attainment: 0.75, weight: 1 }])
+    expect(recorded[0]?.pressureObjective).toBe('overall')
+    expect(await test.trajectory.renderLog()).toContain('overall 75%')
+  })
+
+  it('registers the evolve and trajectory tools with working execute and render', async () => {
+    const cycles: ScriptedCycle[] = [
+      {
+        record: {
+          id: RsiCycleId('cycle-1'), trigger: 'command', startedAt: 1, settledAt: 2, outcome: 'promoted',
+          baselineScore: 0.2, candidateScore: 0.6, improvement: 0.4, threshold: 0.05,
+          candidateId: RsiGenerationId('gen-2'), rationale: 'shape improved',
+        }, knowledgeRows: 1,
+      },
+    ]
+    const registry = new Map<string, {
+      name: string
+      execute: (args: unknown) => Promise<{ report: string }>
+      output: { render: (args: unknown, value: { report: string }) => unknown }
+      presentCall: (args: unknown) => unknown
+      presentResult: (args: unknown, result: unknown) => unknown
+    }>()
+    const test = await trajectoryHarness(
+      call => cycles[call - 1] ?? { knowledgeRows: 1 },
+      { rounds: 1 },
+      { stubTools: true },
+    )
+    for (const tool of test.registeredTools) {
+      const named = tool as { name: string }
+      registry.set(named.name, named as never)
+    }
+    expect(registry.has('rsi_evolve')).toBe(true)
+    expect(registry.has('rsi_trajectory')).toBe(true)
+    const evolve = registry.get('rsi_evolve')!
+    const result = await evolve.execute({ rounds: 1 })
+    expect(result.report).toContain('Evolved 1 round(s)')
+    expect(result.report).toContain('flowchart TD')
+    // A non-integer rounds argument falls back to the configured default.
+    await evolve.execute({ rounds: 2.5 })
+    expect(JSON.stringify(evolve.presentCall({ rounds: 1 }))).toContain('rsi_evolve')
+    const rendered = evolve.output.render({}, result) as readonly { text: string }[]
+    expect(rendered[0]?.text).toContain('Evolved 1 round(s)')
+    expect(evolve.presentResult({}, result)).toMatchObject({ card: 'generic' })
+    const show = registry.get('rsi_trajectory')!
+    const shown = await show.execute({})
+    expect(shown.report).toContain('Evolution trajectory (oldest first):')
+    const showRendered = show.output.render({}, shown) as readonly { text: string }[]
+    expect(showRendered[0]?.text).toContain('Evolution trajectory (oldest first):')
+    expect(JSON.stringify(show.presentCall({}))).toContain('rsi_trajectory')
+    expect(show.presentResult({}, shown)).toMatchObject({ card: 'generic' })
   })
 })
 
