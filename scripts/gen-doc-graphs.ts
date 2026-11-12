@@ -115,6 +115,20 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Records distilled proposals and joins their benchmark scores by content fingerprint so the replay distiller can dream over realized outcomes.',
   },
   {
+    key: 'rsiEvolutionTrajectory',
+    pkg: 'experimental-dual-core-rsi-evolution',
+    title: 'Dual-core RSI evolution trajectory',
+    mode: 'service',
+    note: 'Drives bounded evolution rounds, snapshots the Harmony objective attainments, and settles each round into the JSONL trajectory log and the topology graph.',
+  },
+  {
+    key: 'rsiWorldModel',
+    pkg: 'experimental-dual-core-rsi-evolution',
+    title: 'Dual-core RSI world model',
+    mode: 'service',
+    note: 'Classifies replay prediction reliability over a sliding window of prediction-observation pairs and gates the dream admission behind a conditional adaptation.',
+  },
+  {
     key: 'cotTranslation',
     pkg: 'experimental-client-ui-cot-translation',
     title: 'Reasoning translation Remote',

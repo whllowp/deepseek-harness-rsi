@@ -24,8 +24,9 @@ import type {
 } from '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  DomainEvolutionTrajectory, DomainReplayLedger, HarmonyRsiBenchmark, ReplayRsiDistiller,
-  RsiEvolutionLedger, artifactsFingerprint, rsiEvolutionDomain,
+  DomainEvolutionTrajectory, DomainReplayLedger, HarmonyRsiBenchmark, LedgerWorldModel,
+  ReplayRsiDistiller, RsiEvolutionLedger, WorldModel, artifactsFingerprint, rsiEvolutionDomain,
+  type WorldModelConfig,
 } from '../src/index.ts'
 import * as ledgerEntry from '../src/plugin-evolution-ledger.ts'
 import * as harmonyEntry from '../src/plugin-harmony-benchmark.ts'
@@ -137,6 +138,17 @@ class StubInnerBenchmark extends RsiBenchmark {
   }
 }
 
+/** World-model stub with throwing assessments, for containment coverage. */
+class ThrowingWorldModel extends WorldModel {
+  assess(): Promise<never> {
+    throw new Error('world-model assess down')
+  }
+
+  isAdapted(): Promise<boolean> {
+    throw new Error('world-model adapted down')
+  }
+}
+
 /** Ledger stub with throwing writes, for containment coverage. */
 class ThrowingLedger extends RsiEvolutionLedger {
   async recordProposal(): Promise<void> {
@@ -157,6 +169,26 @@ class ThrowingLedger extends RsiEvolutionLedger {
 
   async trajectoryRounds(): Promise<readonly never[]> {
     return []
+  }
+
+  async recordPrediction(): Promise<void> {
+    throw new Error('ledger prediction write down')
+  }
+
+  async predictionsFor(): Promise<ReadonlyMap<string, number>> {
+    return new Map()
+  }
+
+  async recordAdaptationFor(): Promise<void> {
+    throw new Error('ledger adaptation write down')
+  }
+
+  async markAdaptationRecoveredFor(): Promise<void> {
+    throw new Error('ledger recovery write down')
+  }
+
+  async isAdaptedFor(): Promise<boolean> {
+    throw new Error('ledger adapted read down')
   }
 }
 
@@ -563,6 +595,43 @@ describe('ReplayRsiDistiller', () => {
     expect(knowledge[2]?.text).toContain('3 recorded proposals carry benchmark outcomes')
   })
 
+  it('runs conservative dream admission while the world model is unreliable', async () => {
+    const test = await harness()
+    tracked(test.ctx, test.root)
+    void new LedgerWorldModel(test.ctx, { minPairs: 1, errorThreshold: 0.2 })
+    // A badly wrong prediction → the world model is unreliable for gen-2.
+    await test.ledger.recordProposal(artifacts(['wrong direction']), { rationale: 'r', matchedActive: false, baselineScore: 0.75 })
+    await test.ledger.recordPrediction('gen-1', artifactsFingerprint(artifacts(['wrong direction'])), 0.15)
+    await test.ledger.recordScore(artifacts(['wrong direction']), 0.75)
+    const { distiller, inner } = replay(test.ctx, { maxLessons: 4, minSamples: 1 }, [strongOutput])
+    const input = distillInput(artifacts(['current policy']), ['kept lesson'])
+    await distiller.distill(input, await options(test.ctx))
+    const knowledge = inner.inputs[0]?.knowledge ?? []
+    // Conservative admission: the directional best/worst lessons are
+    // suppressed; the world-model warning is minted instead.
+    expect(knowledge.some(entry => entry.text.startsWith('world model: replay predictions are unreliable'))).toBe(true)
+    expect(knowledge.some(entry => entry.text.includes('strongest recorded proposal'))).toBe(false)
+    expect(knowledge.some(entry => entry.text.includes('weakest recorded proposal'))).toBe(false)
+    // The lesson cap still applies to the warning + frontier summary.
+    expect(knowledge.length).toBeLessThanOrEqual(4)
+  })
+
+  it('dreams normally once the world model finds no unreliable window', async () => {
+    const test = await harness()
+    tracked(test.ctx, test.root)
+    void new LedgerWorldModel(test.ctx, { minPairs: 1 })
+    // An exact prediction → a reliable window → normal (non-conservative) admission.
+    await test.ledger.recordProposal(artifacts(['steady direction']), { rationale: 'r', matchedActive: false, baselineScore: 0.75 })
+    await test.ledger.recordPrediction('gen-1', artifactsFingerprint(artifacts(['steady direction'])), 0.75)
+    await test.ledger.recordScore(artifacts(['steady direction']), 0.75)
+    const { distiller, inner } = replay(test.ctx, { maxLessons: 4, minSamples: 1 }, [strongOutput])
+    const input = distillInput(artifacts(['current policy']), ['kept lesson'])
+    await distiller.distill(input, await options(test.ctx))
+    const knowledge = inner.inputs[0]?.knowledge ?? []
+    expect(knowledge.some(entry => entry.text.includes('strongest recorded proposal'))).toBe(true)
+    expect(knowledge.some(entry => entry.text.startsWith('world model:'))).toBe(false)
+  })
+
   it('contains ledger proposal write failures after the child has answered', async () => {
     const ctx = new Context()
     tracked(ctx, '')
@@ -575,12 +644,14 @@ describe('ReplayRsiDistiller', () => {
     void new ThrowingLedger(ctx)
     const warn = vi.fn()
     ctx.logger.warn = warn
+    void new ThrowingWorldModel(ctx)
     const inner = new StubInnerDistiller(ctx.isolate('rsiDistiller'), [strongOutput])
     const distiller = new ReplayRsiDistiller(ctx, {}, inner)
     const anchor = await stubAgent(ctx)
     await expect(distiller.distill(distillInput(EMPTY), { parent: anchor, signal: new AbortController().signal }))
       .resolves.toEqual(strongOutput)
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('ledger proposal write failed'))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('world-model assessment failed'))
   })
 
   it('keeps an explicitly injected inner distiller without starting a detached one', async () => {
@@ -705,7 +776,7 @@ describe('DomainEvolutionTrajectory', () => {
   async function trajectoryHarness(
     script: (call: number) => ScriptedCycle,
     config?: TrajectoryConfig,
-    options?: { stubTools?: boolean; plainBenchmark?: boolean },
+    options?: { stubTools?: boolean; plainBenchmark?: boolean; downWorldModel?: boolean; worldModel?: WorldModelConfig },
   ): Promise<TrajectoryHarness> {
     const ctx = new Context()
     const root = await mkdtemp(join(tmpdir(), 'rsi-trajectory-'))
@@ -727,6 +798,11 @@ describe('DomainEvolutionTrajectory', () => {
     }
     const ledger = new DomainReplayLedger(ctx, {})
     await ledger.waitReady()
+    if (options?.downWorldModel === true) {
+      void new ThrowingWorldModel(ctx)
+    } else {
+      void new LedgerWorldModel(ctx, options?.worldModel ?? {})
+    }
     void new StubController(ctx, script)
     const innerReport = (): RsiBenchmarkReport => ({
       provider: 'stub', scoredAt: 1, score: 2 / 3, cases: [
@@ -906,6 +982,29 @@ describe('DomainEvolutionTrajectory', () => {
     expect(error).toHaveBeenCalledWith(expect.stringContaining('rsi evolution trajectory initialization failed'))
   })
 
+  it('settles a round without reliability when the world model is down', async () => {
+    const test = await trajectoryHarness(() => ({ knowledgeRows: 1 }), { rounds: 1 }, { downWorldModel: true })
+    const recorded = await test.trajectory.runRounds(1)
+    expect(recorded[0]?.reliability).toBeUndefined()
+    expect(recorded[0]?.reliabilityPairs).toBeUndefined()
+    const log = await test.trajectory.renderLog()
+    expect(log).toContain('r1 promoted')
+    expect(log).not.toContain('world=')
+  })
+
+  it('carries the world-model snapshot in the round row and the log', async () => {
+    const test = await trajectoryHarness(() => ({ knowledgeRows: 1 }), { rounds: 1 }, { worldModel: { minPairs: 1 } })
+    // One exact prediction joined to its score: a reliable single-pair window
+    // attributable to the active version.
+    await test.ledger.recordProposal(artifacts(['w']), { rationale: 'r', matchedActive: false, baselineScore: 0.75 })
+    await test.ledger.recordPrediction('gen-1', artifactsFingerprint(artifacts(['w'])), 0.75)
+    await test.ledger.recordScore(artifacts(['w']), 0.75)
+    const recorded = await test.trajectory.runRounds(1)
+    expect(recorded[0]?.reliability).toBe('reliable')
+    expect(recorded[0]?.reliabilityPairs).toBe(1)
+    expect(await test.trajectory.renderLog()).toContain(' world=reliable(1 pairs) — ')
+  })
+
   it('falls back to one overall objective on a non-Harmony benchmark', async () => {
     const test = await trajectoryHarness(() => ({ knowledgeRows: 1 }), { rounds: 1 }, { plainBenchmark: true })
     const recorded = await test.trajectory.runRounds(1)
@@ -959,6 +1058,79 @@ describe('DomainEvolutionTrajectory', () => {
     expect(showRendered[0]?.text).toContain('Evolution trajectory (oldest first):')
     expect(JSON.stringify(show.presentCall({}))).toContain('rsi_trajectory')
     expect(show.presentResult({}, shown)).toMatchObject({ card: 'generic' })
+  })
+})
+
+describe('LedgerWorldModel', () => {
+  it('rejects invalid configuration at load', () => {
+    const ctx = new Context()
+    tracked(ctx, '')
+    expect(() => new LedgerWorldModel(ctx, { window: 0 })).toThrow(/window/)
+    expect(() => new LedgerWorldModel(ctx, { minPairs: 0 })).toThrow(/minPairs/)
+    expect(() => new LedgerWorldModel(ctx, { errorThreshold: 1.5 })).toThrow(/errorThreshold/)
+    expect(() => new LedgerWorldModel(ctx, { errorThreshold: Number.NaN })).toThrow(/errorThreshold/)
+  })
+
+  it('classifies insufficient, unreliable, and reliable windows per version', async () => {
+    const test = await harness()
+    void new LedgerWorldModel(test.ctx, {})
+    tracked(test.ctx, test.root)
+    // Round a: prediction 0.9 vs observed -0.15 → error 1.05 (unreliable when sufficient).
+    await test.ledger.recordProposal(artifacts(['a']), { rationale: 'r', matchedActive: false, baselineScore: 0.75 })
+    await test.ledger.recordPrediction('gen-2', artifactsFingerprint(artifacts(['a'])), 0.9)
+    await test.ledger.recordScore(artifacts(['a']), 0.6)
+    // Round b: prediction -0.4 vs observed -0.4 → error 0 (reliable).
+    await test.ledger.recordProposal(artifacts(['b']), { rationale: 'r', matchedActive: false, baselineScore: 1 })
+    await test.ledger.recordPrediction('gen-3', artifactsFingerprint(artifacts(['b'])), 0.6)
+    await test.ledger.recordScore(artifacts(['b']), 0.6)
+
+    // minPairs 3 → insufficient at 1 version-attributable pair.
+    const insufficient = await test.ctx.rsiWorldModel.assess('gen-3')
+    expect(insufficient.status).toBe('insufficient')
+
+    // The version rule: gen-3's window joins only its own prediction — the
+    // gen-2 prediction stays out of the gen-3 window.
+    const assessed = await test.ctx.rsiWorldModel.assess('gen-3')
+    expect(assessed.pairs).toHaveLength(1)
+    expect(assessed.pairs[0]?.fingerprint).toBe(artifactsFingerprint(artifacts(['b'])))
+  })
+
+  it('triggers the conditional adaptation on an unreliable window and ends it on recovery', async () => {
+    const test = await harness()
+    tracked(test.ctx, test.root)
+    void new LedgerWorldModel(test.ctx, { minPairs: 1, errorThreshold: 0.4 })
+    // One pair with a huge prediction error → unreliable with a single pair.
+    await test.ledger.recordProposal(artifacts(['wrong direction']), { rationale: 'r', matchedActive: false, baselineScore: 0.75 })
+    await test.ledger.recordPrediction('gen-2', artifactsFingerprint(artifacts(['wrong direction'])), 0.15)
+    await test.ledger.recordScore(artifacts(['wrong direction']), 0.75)
+    const first = await test.ctx.rsiWorldModel.assess('gen-2')
+    expect(first.status).toBe('unreliable')
+    expect(first.adapted).toBe(true)
+    expect(await test.ctx.rsiWorldModel.isAdapted('gen-2')).toBe(true)
+
+    // A reliable window (exact prediction) ends the adaptation.
+    await test.ledger.recordProposal(artifacts(['right direction']), { rationale: 'r', matchedActive: false, baselineScore: 0.75 })
+    await test.ledger.recordPrediction('gen-2', artifactsFingerprint(artifacts(['right direction'])), 0.85)
+    await test.ledger.recordScore(artifacts(['right direction']), 0.85)
+    const recovered = await test.ctx.rsiWorldModel.assess('gen-2')
+    expect(recovered.status).toBe('reliable')
+    expect(await test.ctx.rsiWorldModel.isAdapted('gen-2')).toBe(false)
+  })
+
+  it('keeps versions isolated: pairs from other policies never join', async () => {
+    const test = await harness()
+    void new LedgerWorldModel(test.ctx, {})
+    tracked(test.ctx, test.root)
+    // A prediction recorded under gen-2, plus a scored proposal under gen-9:
+    // the version rule must not join them. markAdaptationRecoveredFor on a
+    // version without an adaptation resolves quietly.
+    await test.ctx.rsiEvolutionLedger.markAdaptationRecoveredFor('gen-9')
+    await test.ledger.recordProposal(artifacts(['other version content']), { rationale: 'r', matchedActive: false, baselineScore: 0.5 })
+    await test.ledger.recordScore(artifacts(['other version content']), 0.8)
+    await test.ledger.recordPrediction('gen-2', artifactsFingerprint(artifacts(['other version content'])), 0.9)
+    const assessed = await test.ctx.rsiWorldModel.assess('gen-9')
+    expect(assessed.status).toBe('insufficient')
+    expect(assessed.pairs).toHaveLength(0)
   })
 })
 

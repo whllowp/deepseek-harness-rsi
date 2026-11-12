@@ -3,41 +3,47 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/experimental/dual-core-rsi-evolution/README.md
 /:
-  en: 173714c5c27d31dd
-  zh: 36d60b1879eed732
+  en: 4c4a3c78006be657
+  zh: b651f0e67d0721df
 /deepseek-ai-dsh-experimental-dual-core-rsi-evolution:
   en: bcd4165a605a0574
   zh: 27397242710efffe
 /deepseek-ai-dsh-experimental-dual-core-rsi-evolution/summary:
-  en: 9a7778cf97d8b7cf
-  zh: 88d68475676de598
+  en: 8f82d48a4d9dd5f8
+  zh: 679e1fdb6d781c47
 /deepseek-ai-dsh-experimental-dual-core-rsi-evolution/table-of-contents:
   en: b563e4ec4727d0de
   zh: bbfde3e94b2fe768
 /deepseek-ai-dsh-experimental-dual-core-rsi-evolution/use-this-package:
-  en: 4e0df0cc2a389085
-  zh: 27ab6adfc81d8378
+  en: 0dee164954af67fd
+  zh: 9e58c9c05a916eb7
 /deepseek-ai-dsh-experimental-dual-core-rsi-evolution/use-this-package/the-replay-ledger:
   en: c89dd739fc614544
   zh: 4951a64810d143d0
 /deepseek-ai-dsh-experimental-dual-core-rsi-evolution/use-this-package/dreaming-before-distilling:
   en: 4bd9d2c866dc6d80
   zh: f413f8084ce969a7
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/use-this-package/the-trajectory-record:
+  en: e74b6965b66f3aee
+  zh: 02f15e0bcdfcbb42
+/deepseek-ai-dsh-experimental-dual-core-rsi-evolution/use-this-package/the-world-model-gate:
+  en: 43b3ea2e04e78fcf
+  zh: fc261d692b95c5f9
 /deepseek-ai-dsh-experimental-dual-core-rsi-evolution/use-this-package/the-tchebycheff-gate:
   en: 6634cd362dd4dfab
   zh: 517f2ddd259b0059
 /deepseek-ai-dsh-experimental-dual-core-rsi-evolution/use-this-package/config:
-  en: 5bf78f4eff5aa0d8
-  zh: e6c4aea328b5aabd
+  en: 22741a6e9abd2d40
+  zh: 382b0387c18b3a8c
 /deepseek-ai-dsh-experimental-dual-core-rsi-evolution/use-this-package/model-experience-audit-note:
   en: 65dd2b284e2c32e0
   zh: abefd55c39527385
 /deepseek-ai-dsh-experimental-dual-core-rsi-evolution/understand-the-implementation:
-  en: 2718678f2b97fc8d
-  zh: cb056ce94be574fd
+  en: da4cb730da6fd65f
+  zh: e096bedf8cd9119a
 /deepseek-ai-dsh-experimental-dual-core-rsi-evolution/further-exploration:
-  en: 6bc1496a1b0c0b48
-  zh: ee2f1229f7e25e2f
+  en: 58749dde5eaed9a1
+  zh: a463b7c581fb1c9e
 /deepseek-ai-dsh-experimental-dual-core-rsi-evolution/model-experience:
   en: 215e7ba838619b7b
   zh: a311da3843709f90

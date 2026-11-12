@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Add the dual-core RSI mode in its evolved composition: the same default-on daemon, sidebar panel, and pixel-hero companion as the dual-core RSI bundle, with the distiller and benchmark rows replaced by the [evolution plugins](../dual-core-rsi-evolution/README.md) — a replay distiller that dreams over recorded proposal/score outcomes before each distillation, and a multi-objective benchmark whose Tchebycheff gate keeps pressure on the worst-attaining objective family. An alternative to the dual-core RSI bundle: mount one or the other, never both.
+Add the dual-core RSI mode in its evolved composition: the same default-on daemon, sidebar panel, and pixel-hero companion as the dual-core RSI bundle, with the distiller and benchmark rows replaced by the [evolution plugins](../dual-core-rsi-evolution/README.md) — a replay distiller that dreams over recorded proposal/score outcomes before each distillation, and a multi-objective benchmark whose Tchebycheff gate keeps pressure on the worst-attaining objective family, a world model that gates the dream behind prediction reliability, and a trajectory runner over the composed cycle. An alternative to the dual-core RSI bundle: mount one or the other, never both.
 
 ## Table of Contents
 
@@ -26,12 +26,12 @@ Add the dual-core RSI mode in its evolved composition: the same default-on daemo
 
 In Web or Desktop, open Plugins and enable **Dual-core RSI Evolution** in place of **Dual-core RSI** (mount one or the other, never both). Switch it off to remove its profile layer.
 
-Enabling the bundle mounts the replay ledger, the Harmony benchmark over the shipped fixture case evaluator, the replay distiller over the shipped subagent distiller, the dual-core RSI service with its tools and `/rsi` command, the Self-evolution sidebar panel, and the pixel-hero companion. The scheduled daemon cycles on fresh session activity and adopts qualifying candidates by itself. The shipped objective split rewards policies that carry `npm test`, `git status`, and `CHANGELOG` guidance within a 1200-character budget, weighted 0.75 verification against 0.25 economy, so the gate demonstrates balanced multi-objective adoption rather than end-task quality.
+Enabling the bundle mounts the replay ledger, the world model over it, the Harmony benchmark over the shipped fixture case evaluator, the replay distiller over the shipped subagent distiller, the trajectory runner, the dual-core RSI service with its tools and `/rsi` command, the Self-evolution sidebar panel, and the pixel-hero companion. The scheduled daemon cycles on fresh session activity and adopts qualifying candidates by itself. The shipped objective split rewards policies that carry `npm test`, `git status`, and `CHANGELOG` guidance within a 1200-character budget, weighted 0.75 verification against 0.25 economy, so the gate demonstrates balanced multi-objective adoption rather than end-task quality.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 
-The patch inserts five rows over the base composition: `dual-core-rsi-evolution-ledger`, `dual-core-rsi-benchmark` (the Harmony provider), `dual-core-rsi-distiller` (the replay provider), `dual-core-rsi` (the service), and the two client rows. Provider selection is composition, not configuration branching; swap the bundle to swap the strategy. The case set and objective weights in `cordis.patch.yml` are deployment choices, editable like any row config.
+The patch inserts eight rows over the base composition: `dual-core-rsi-evolution-ledger`, `dual-core-rsi-evolution-world-model`, `dual-core-rsi-benchmark` (the Harmony provider), `dual-core-rsi-distiller` (the replay provider), `dual-core-rsi-evolution-trajectory`, `dual-core-rsi` (the service), and the two client rows. Provider selection is composition, not configuration branching; swap the bundle to swap the strategy. The case set and objective weights in `cordis.patch.yml` are deployment choices, editable like any row config.
 
 <a id="further-exploration"></a>
 ## Further Exploration

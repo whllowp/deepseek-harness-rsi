@@ -23,11 +23,12 @@ import DualCoreRsiService from '@deepseek-ai/dsh-experimental-dual-core-rsi'
 import * as dualCoreRsiPlugin from '@deepseek-ai/dsh-experimental-dual-core-rsi'
 import * as distillerSubagentPlugin from '@deepseek-ai/dsh-experimental-dual-core-rsi/distiller-subagent'
 import * as benchmarkFixturePlugin from '@deepseek-ai/dsh-experimental-dual-core-rsi/benchmark-fixture'
-import { DomainEvolutionTrajectory, DomainReplayLedger, HarmonyRsiBenchmark, ReplayRsiDistiller } from '../src/index.ts'
+import { DomainEvolutionTrajectory, DomainReplayLedger, HarmonyRsiBenchmark, LedgerWorldModel, ReplayRsiDistiller } from '../src/index.ts'
 import * as evolutionLedgerPlugin from '../src/plugin-evolution-ledger.ts'
 import * as harmonyBenchmarkPlugin from '../src/plugin-harmony-benchmark.ts'
 import * as replayDistillerPlugin from '../src/plugin-replay-distiller.ts'
 import * as trajectoryPlugin from '../src/plugin-trajectory.ts'
+import * as worldModelPlugin from '../src/plugin-world-model.ts'
 
 let root: string | undefined
 let context: Context | undefined
@@ -76,6 +77,8 @@ describe('dual-core RSI evolution through a real Loader composition', () => {
       "  name: '@deepseek-ai/dsh-subagent'",
       '- id: dual-core-rsi-evolution-ledger',
       "  name: '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/evolution-ledger'",
+      '- id: dual-core-rsi-evolution-world-model',
+      "  name: '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/world-model'",
       '- id: dual-core-rsi-benchmark',
       "  name: '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/harmony-benchmark'",
       '  config:',
@@ -132,6 +135,7 @@ describe('dual-core RSI evolution through a real Loader composition', () => {
           case '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/harmony-benchmark': return harmonyBenchmarkPlugin
           case '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/replay-distiller': return replayDistillerPlugin
           case '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/trajectory': return trajectoryPlugin
+          case '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/world-model': return worldModelPlugin
           default: throw new Error(`unexpected Loader import: ${specifier}`)
         }
       },
@@ -147,6 +151,7 @@ describe('dual-core RSI evolution through a real Loader composition', () => {
     expect(context.rsiDistiller).toBeInstanceOf(ReplayRsiDistiller)
     expect(context.rsiBenchmark).toBeInstanceOf(HarmonyRsiBenchmark)
     expect(context.rsiEvolutionLedger).toBeInstanceOf(DomainReplayLedger)
+    expect(context.rsiWorldModel).toBeInstanceOf(LedgerWorldModel)
     expect(context.rsiEvolutionTrajectory).toBeInstanceOf(DomainEvolutionTrajectory)
     expect(context.dualCoreRsi).toBeInstanceOf(DualCoreRsiService)
     await context.dualCoreRsi.waitReady()

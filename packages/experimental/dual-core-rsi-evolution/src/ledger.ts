@@ -15,6 +15,8 @@ import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import { rsiEvolutionDomain } from './domain.ts'
 import type { RsiReplayProposal, RsiTrajectoryRound } from './domain.ts'
 
+export type { RsiReplayProposal }
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Shared replay ledger correlating distilled proposals with earned scores. */
@@ -110,6 +112,49 @@ export abstract class RsiEvolutionLedger extends Service {
    * @returns the bounded round rows.
    */
   abstract trajectoryRounds(): Promise<readonly RsiTrajectoryRound[]>
+
+  /**
+   * Record one world-model prediction for a proposal under a policy version.
+   * Re-predicting the same content under the same version upserts the row.
+   * @param version - the policy version the prediction is attributable to.
+   * @param fingerprint - the proposed artifact set's fingerprint.
+   * @param predictedDelta - the replay model's expected benchmark delta.
+   * @returns resolution when the row is durable.
+   */
+  abstract recordPrediction(version: string, fingerprint: string, predictedDelta: number): Promise<void>
+
+  /**
+   * Every prediction recorded under one policy version, as a fingerprint to
+   * predicted-delta map.
+   * @param version - the policy version to read.
+   * @returns the fingerprint to predicted-delta map.
+   */
+  abstract predictionsFor(version: string): Promise<ReadonlyMap<string, number>>
+
+  /**
+   * Record or refresh the conditional world-model adaptation for a policy
+   * version (upsert keyed by version; clears any recovery).
+   * @param version - the policy version whose predictions are unreliable.
+   * @param mae - the mean absolute error behind the trigger.
+   * @param pairs - the joined pairs behind the trigger.
+   * @returns resolution when the row is durable.
+   */
+  abstract recordAdaptationFor(version: string, mae: number, pairs: number): Promise<void>
+
+  /**
+   * Mark a version's conditional adaptation as recovered (a reliable window
+   * ended it).
+   * @param version - the policy version to clear.
+   * @returns resolution when the row is durable; versions without an adaptation resolve too.
+   */
+  abstract markAdaptationRecoveredFor(version: string): Promise<void>
+
+  /**
+   * Whether a conditional adaptation is active for one policy version.
+   * @param version - the policy version to check.
+   * @returns true while an adaptation exists without a recovery.
+   */
+  abstract isAdaptedFor(version: string): Promise<boolean>
 }
 
 function proposalFacts(artifacts: RsiArtifacts, observation: {
@@ -233,6 +278,20 @@ export class DomainReplayLedger extends RsiEvolutionLedger {
     return this.domain.table('trajectory')
   }
 
+  /** The opened prediction table; every caller has awaited readiness. */
+  private predictionsTable() {
+    /* v8 ignore next -- initialize() always assigns before waitReady() resolves */
+    if (this.domain === undefined) throw new TypeError('the replay ledger domain is not open')
+    return this.domain.table('predictions')
+  }
+
+  /** The opened adaptation table; every caller has awaited readiness. */
+  private adaptationsTable() {
+    /* v8 ignore next -- initialize() always assigns before waitReady() resolves */
+    if (this.domain === undefined) throw new TypeError('the replay ledger domain is not open')
+    return this.domain.table('adaptations')
+  }
+
   /** @inheritdoc */
   async recordRound(round: RsiTrajectoryRound): Promise<void> {
     await this.readyPromise
@@ -244,5 +303,49 @@ export class DomainReplayLedger extends RsiEvolutionLedger {
     await this.readyPromise
     return [...this.trajectoryTable().entries()].map(([, round]) => round)
       .sort((a, b) => a.round - b.round)
+  }
+
+  /** @inheritdoc */
+  async recordPrediction(version: string, fingerprint: string, predictedDelta: number): Promise<void> {
+    await this.readyPromise
+    await this.predictionsTable().put(`${version}::${fingerprint}`, {
+      fingerprint,
+      version,
+      predictedDelta,
+      predictedAt: Date.now(),
+    })
+  }
+
+  /** @inheritdoc */
+  async predictionsFor(version: string): Promise<ReadonlyMap<string, number>> {
+    await this.readyPromise
+    const map = new Map<string, number>()
+    for (const [, row] of this.predictionsTable().entries()) {
+      if (row.version !== version) continue
+      map.set(row.fingerprint, row.predictedDelta)
+    }
+    return map
+  }
+
+  /** @inheritdoc */
+  async recordAdaptationFor(version: string, mae: number, pairs: number): Promise<void> {
+    await this.readyPromise
+    const adaptedAt = Date.now()
+    await this.adaptationsTable().put(version, { version, mae, pairs, adaptedAt })
+  }
+
+  /** @inheritdoc */
+  async markAdaptationRecoveredFor(version: string): Promise<void> {
+    await this.readyPromise
+    const existing = this.adaptationsTable().get(version)
+    if (existing === undefined) return
+    await this.adaptationsTable().put(version, { ...existing, recoveredAt: Date.now() })
+  }
+
+  /** @inheritdoc */
+  async isAdaptedFor(version: string): Promise<boolean> {
+    await this.readyPromise
+    const existing = this.adaptationsTable().get(version)
+    return existing !== undefined && existing.recoveredAt === undefined
   }
 }

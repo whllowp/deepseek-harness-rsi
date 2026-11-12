@@ -11,6 +11,7 @@
 import { appendFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
+import { positiveInteger } from './bounds.ts'
 import z from '@deepseek-ai/schemastery'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -19,6 +20,7 @@ import type {} from '@deepseek-ai/dsh-experimental-dual-core-rsi'
 import type { DualCoreRsiService, RsiCycleRecord } from '@deepseek-ai/dsh-experimental-dual-core-rsi'
 import { HarmonyRsiBenchmark } from './harmony-benchmark.ts'
 import type { ObjectiveAttainment, RsiTrajectoryRound } from './domain.ts'
+import type { ReliabilityStatus } from './world-model.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -37,14 +39,6 @@ export interface TrajectoryConfig {
   rounds?: number
   /** Directory of the JSONL trajectory log (default `~/.dsh/dual-core-rsi-evolution-trajectory`). */
   trajectoryDir?: string
-}
-
-function positiveInteger(value: number | undefined, fallback: number, field: string): number {
-  if (value === undefined) return fallback
-  if (!Number.isSafeInteger(value) || value < 1) {
-    throw new TypeError(`${field} must be a positive safe integer, got ${String(value)}`)
-  }
-  return value
 }
 
 function normalizedDirectory(value: string | undefined, fallback: string, field: string): string {
@@ -114,18 +108,22 @@ export abstract class EvolutionTrajectory extends Service {
    */
   abstract renderLog(): Promise<string>
 
-  /** Every recorded round, oldest first. */
+  /**
+   * Every recorded trajectory round, oldest first.
+   * @returns the round rows in round order.
+   */
   abstract rounds(): Promise<readonly RsiTrajectoryRound[]>
 }
 
 /**
  * Service Provider for `ctx.rsiEvolutionTrajectory`: drives the controller,
- * snapshots the Harmony objective attainments, computes the Tchebycheff
- * pressure direction, and settles each round into the ledger's trajectory
- * table, the JSONL log, and the rendered topology.
+ * snapshots the Harmony objective attainments and the world-model reliability
+ * over the starting policy version, computes the Tchebycheff pressure
+ * direction, and settles each round into the ledger's trajectory table, the
+ * JSONL log, and the rendered topology.
  */
 export class DomainEvolutionTrajectory extends EvolutionTrajectory {
-  static inject = ['dualCoreRsi', 'rsiEvolutionLedger', 'rsiBenchmark', 'tools']
+  static inject = ['dualCoreRsi', 'rsiEvolutionLedger', 'rsiBenchmark', 'rsiWorldModel', 'tools']
 
   static Config: z<TrajectoryConfig> = z.object({
     rounds: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(10),
@@ -188,7 +186,7 @@ export class DomainEvolutionTrajectory extends EvolutionTrajectory {
     }))
     this.ctx.tools.register(defineTool({
       name: 'rsi_trajectory',
-      description: 'Show the dual-core RSI evolution trajectory read-only: the per-round log with objective attainments and pressure direction, and the proposal-lineage topology graph.',
+      description: 'Show the dual-core RSI evolution trajectory read-only: the per-round log with objective attainments, pressure direction, and world-model reliability, plus the proposal-lineage topology graph.',
       parameters: {},
       output: {
         schema: { type: 'object', additionalProperties: false, properties: { report: { type: 'string', required: true } } },
@@ -232,6 +230,19 @@ export class DomainEvolutionTrajectory extends EvolutionTrajectory {
     const pressureObjective = this.pressure(objectives)
     const ledgerRows = (await this.ctx.rsiEvolutionLedger.entries()).length
     const knowledgeRows = (await this.ctx.dualCoreRsi.history(20)).knowledge.length
+    // The round's world-model state over the starting policy version: the
+    // same assessment the next distillation's dream admission would run.
+    // Contained: a world-model outage must not fail the settled round.
+    let reliability: ReliabilityStatus | undefined
+    let reliabilityPairs: number | undefined
+    try {
+      const assessment = await this.ctx.rsiWorldModel.assess(before.active.id)
+      reliability = assessment.status
+      reliabilityPairs = assessment.pairs.length
+    } catch (error) {
+      /* v8 ignore next -- the String arm needs a non-Error rejection, which the world model never produces */
+      this.ctx.logger.warn(`rsi evolution trajectory: world-model snapshot failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
     let outcome: string
     let note: string
     if (record === undefined) {
@@ -253,6 +264,8 @@ export class DomainEvolutionTrajectory extends EvolutionTrajectory {
       ...pressureObjective === undefined ? {} : { pressureObjective },
       ledgerRows,
       knowledgeRows,
+      ...(reliability === undefined ? {} : { reliability }),
+      ...(reliabilityPairs === undefined ? {} : { reliabilityPairs }),
       note,
       settledAt: Date.now(),
     }
@@ -329,7 +342,10 @@ export class DomainEvolutionTrajectory extends EvolutionTrajectory {
         ? ''
         : ` ${formatScore(row.baselineScore)}→${formatScore(row.candidateScore)}`
       const pressure = row.pressureObjective === undefined ? '' : ` pressure=${row.pressureObjective}`
-      lines.push(`r${String(row.round)} ${row.outcome}${scores} [${objectives}]${pressure} — ${row.note}`)
+      const world = row.reliability === undefined || row.reliabilityPairs === undefined
+        ? ''
+        : ` world=${row.reliability}(${String(row.reliabilityPairs)} pairs)`
+      lines.push(`r${String(row.round)} ${row.outcome}${scores} [${objectives}]${pressure}${world} — ${row.note}`)
     }
     lines.push(`Trajectory log: ${join(this.trajectoryDir, LOG_FILE_NAME)}`)
     return lines.join('\n')

@@ -2080,6 +2080,98 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
         returns: 'the bounded ledger rows.',
       },
+      {
+        signature: 'abstract recordRound(round: RsiTrajectoryRound): Promise<void>',
+        description: 'Settle one evolution trajectory round.',
+        parameters: [{ name: 'round', description: 'the settled round record.' }],
+        returns: 'resolution when the row is durable.',
+      },
+      {
+        signature: 'abstract trajectoryRounds(): Promise<readonly RsiTrajectoryRound[]>',
+        description: 'Every recorded trajectory round, oldest first.',
+        parameters: [],
+        returns: 'the bounded round rows.',
+      },
+      {
+        signature: 'abstract recordPrediction(version: string, fingerprint: string, predictedDelta: number): Promise<void>',
+        description: 'Record one world-model prediction for a proposal under a policy version. Re-predicting the same content under the same version upserts the row.',
+        parameters: [{ name: 'version', description: 'the policy version the prediction is attributable to.' }, { name: 'fingerprint', description: 'the proposed artifact set\'s fingerprint.' }, { name: 'predictedDelta', description: 'the replay model\'s expected benchmark delta.' }],
+        returns: 'resolution when the row is durable.',
+      },
+      {
+        signature: 'abstract predictionsFor(version: string): Promise<ReadonlyMap<string, number>>',
+        description: 'Every prediction recorded under one policy version, as a fingerprint to predicted-delta map.',
+        parameters: [{ name: 'version', description: 'the policy version to read.' }],
+        returns: 'the fingerprint to predicted-delta map.',
+      },
+      {
+        signature: 'abstract recordAdaptationFor(version: string, mae: number, pairs: number): Promise<void>',
+        description: 'Record or refresh the conditional world-model adaptation for a policy version (upsert keyed by version; clears any recovery).',
+        parameters: [{ name: 'version', description: 'the policy version whose predictions are unreliable.' }, { name: 'mae', description: 'the mean absolute error behind the trigger.' }, { name: 'pairs', description: 'the joined pairs behind the trigger.' }],
+        returns: 'resolution when the row is durable.',
+      },
+      {
+        signature: 'abstract markAdaptationRecoveredFor(version: string): Promise<void>',
+        description: 'Mark a version\'s conditional adaptation as recovered (a reliable window ended it).',
+        parameters: [{ name: 'version', description: 'the policy version to clear.' }],
+        returns: 'resolution when the row is durable; versions without an adaptation resolve too.',
+      },
+      {
+        signature: 'abstract isAdaptedFor(version: string): Promise<boolean>',
+        description: 'Whether a conditional adaptation is active for one policy version.',
+        parameters: [{ name: 'version', description: 'the policy version to check.' }],
+        returns: 'true while an adaptation exists without a recovery.',
+      },
+    ],
+  },
+  {
+    key: 'rsiEvolutionTrajectory',
+    summary: 'Service Definition of the evolution trajectory.',
+    description: 'Service Definition of the evolution trajectory. Every round runs one daemon cycle through the controller, snapshots the objective shape and the Tchebycheff pressure direction, and settles one durable trajectory row plus one JSONL line, so a ten-round evolution leaves a replayable log and a renderable topology.',
+    methods: [
+      {
+        signature: 'abstract runRounds(count?: number, signal?: AbortSignal): Promise<readonly RsiTrajectoryRound[]>',
+        description: 'Run `count` evolution rounds, recording each as one trajectory row. A failed round is recorded and the remaining rounds continue.',
+        parameters: [{ name: 'count', description: 'rounds to run; omission uses the configured default.' }, { name: 'signal', description: 'cancellation signal owned by the caller.' }],
+        returns: 'the rounds recorded by this invocation.',
+      },
+      {
+        signature: 'abstract renderTopology(): Promise<string>',
+        description: 'Render the evolution topology: one node per generation the rounds touched, one edge per round\'s active→candidate proposal, labeled with the round, outcome, and score delta.',
+        parameters: [],
+        returns: 'a mermaid `flowchart TD` block.',
+      },
+      {
+        signature: 'abstract renderLog(): Promise<string>',
+        description: 'Render the trajectory log: one line per round with scores, objective attainments, and the pressure direction.',
+        parameters: [],
+        returns: 'the plain-text trajectory log.',
+      },
+      {
+        signature: 'abstract rounds(): Promise<readonly RsiTrajectoryRound[]>',
+        description: 'Every recorded trajectory round, oldest first.',
+        parameters: [],
+        returns: 'the round rows in round order.',
+      },
+    ],
+  },
+  {
+    key: 'rsiWorldModel',
+    summary: 'Service Definition of the prediction-reliability world model.',
+    description: 'Service Definition of the prediction-reliability world model. Reliability follows the version rule: only predictions recorded under the assessed policy version join the window, so proposals distilled under earlier policies never contaminate the current error estimate.',
+    methods: [
+      {
+        signature: 'abstract assess(version: string): Promise<ReliabilityAssessment>',
+        description: 'Assess prediction reliability for one policy version from the replay ledger\'s joined prediction–observation pairs. An insufficient window (fewer joined pairs than `minPairs`) is reported as insufficient rather than treated as evidence of reliability. An unreliable sufficient window triggers a conditional adaptation; a later reliable window ends it.',
+        parameters: [{ name: 'version', description: 'the policy version (active generation id) to assess.' }],
+        returns: 'the classification with its supporting pairs and mean absolute error.',
+      },
+      {
+        signature: 'abstract isAdapted(version: string): Promise<boolean>',
+        description: 'Whether the conservative dream admission is active for one policy version (a conditional adaptation fired and no reliable window has ended it).',
+        parameters: [{ name: 'version', description: 'the policy version to check.' }],
+        returns: 'true while the adaptation is active.',
+      },
     ],
   },
   {
@@ -6573,6 +6665,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type PostToolDecision = {\n    kind: \'accept\';\n    content?: ContentBlock[];\n    value?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'accept\';\n    value: JsonValue;\n    content?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'block\';\n    feedback: ContentBlock[];\n    additionalContexts?: UserMessage[];\n};',
   },
   {
+    name: 'PredictionPair',
+    declaration: 'export interface PredictionPair {\n    readonly fingerprint: string;\n    readonly predictedDelta: number;\n    readonly observedDelta: number;\n}',
+  },
+  {
     name: 'PreparedAdapterCall',
     declaration: 'export interface PreparedAdapterCall {\n    readonly model: LlmResolvedModelInfo;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
   },
@@ -6791,6 +6887,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'Registry',
     declaration: 'export type Registry = string | null;',
+  },
+  {
+    name: 'ReliabilityAssessment',
+    declaration: 'export interface ReliabilityAssessment {\n    readonly status: ReliabilityStatus;\n    readonly pairs: readonly PredictionPair[];\n    readonly mae: number;\n    readonly adapted: boolean;\n}',
+  },
+  {
+    name: 'ReliabilityStatus',
+    declaration: 'export type ReliabilityStatus = \'reliable\' | \'unreliable\' | \'insufficient\';',
   },
   {
     name: 'Reload',
@@ -7103,6 +7207,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RsiStatusView',
     declaration: 'export interface RsiStatusView {\n    readonly active: RsiGeneration;\n    readonly daemon: RsiGeneration;\n    readonly threshold: number;\n    readonly daemonEnabled: boolean;\n    readonly mergePolicy: RsiMergePolicy;\n    readonly lastCycle?: RsiCycleRecord | undefined;\n    readonly pending?: RsiPendingCandidate | undefined;\n    readonly cycleRunning: boolean;\n    readonly archiveCount: number;\n    readonly incidents: readonly RsiIncidentRecord[];\n    readonly knowledgeCutoffAt?: number | undefined;\n    readonly unseenSessionCount: number;\n}',
+  },
+  {
+    name: 'RsiTrajectoryRound',
+    declaration: 'export type RsiTrajectoryRound = z.infer<typeof trajectorySchema>;',
   },
   {
     name: 'RunnerFailureRule',

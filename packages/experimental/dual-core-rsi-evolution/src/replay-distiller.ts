@@ -137,11 +137,24 @@ export class ReplayRsiDistiller extends RsiDistiller {
    * @returns the inner distiller's decoded output, unmodified.
    */
   async distill(input: RsiDistillInput, options: RsiDistillOptions): Promise<RsiDistillOutput> {
-    const lessons = await this.dreamLessons(input)
+    const admission = await this.admission(input)
+    const lessons = await this.dreamLessons(input, admission)
     const knowledge = lessons.length === 0 ? input.knowledge : [...input.knowledge, ...lessons]
     const output = await this.distillInner({ ...input, knowledge }, options)
-    // Contained: the proposal is already in the caller's hands; a ledger
-    // outage must not fail the cycle that carried it.
+    // The replay model's prediction for this proposal: the mean observed
+    // benchmark delta of the scored proposals, persisted per policy version
+    // so the realized benchmark score later joins it into a paired
+    // prediction-observation record (RSI-Anything's paired feedback).
+    // Contained: a ledger outage must not fail the cycle that carried the
+    // proposal.
+    try {
+      const fingerprint = artifactsFingerprint(output.artifacts)
+      const predicted = await this.meanObservedDelta()
+      await this.ctx.rsiEvolutionLedger.recordPrediction(input.active.id, fingerprint, predicted)
+    } catch (error) {
+      /* v8 ignore next -- the String arm needs a non-Error rejection, which the ledger never produces */
+      this.ctx.logger.warn(`Replay distiller: prediction write failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
     try {
       await this.ctx.rsiEvolutionLedger.recordProposal(output.artifacts, {
         rationale: output.rationale,
@@ -155,6 +168,37 @@ export class ReplayRsiDistiller extends RsiDistiller {
     return output
   }
 
+  /**
+   * The dream's admission decision for one round: the world model's
+   * reliability over prediction-observation pairs attributable to the active
+   * policy version, with the conditional adaptation state (RSI-Anything
+   * Eq 10-12). When unreliable and adapted, the dream runs in conservative
+   * admission — the directional best/worst lessons (the model's own
+   * predictions) are suppressed and a world-model warning lesson is minted
+   * instead.
+   */
+  private async admission(input: RsiDistillInput): Promise<{ conservative: boolean; mae: number }> {
+    try {
+      const assessment = await this.ctx.rsiWorldModel.assess(input.active.id)
+      const conservative = assessment.status === 'unreliable' || await this.ctx.rsiWorldModel.isAdapted(input.active.id)
+      return { conservative, mae: assessment.mae }
+    } catch (error) {
+      /* v8 ignore next -- the String arm needs a non-Error rejection, which the world model never produces */
+      this.ctx.logger.warn(`Replay distiller: world-model assessment failed: ${error instanceof Error ? error.message : String(error)}`)
+      // `mae` is only read under conservative admission, which this arm never reports.
+      return { conservative: false, mae: 0 }
+    }
+  }
+
+  /** The mean observed benchmark delta across scored proposals (the persistence prediction). */
+  private async meanObservedDelta(): Promise<number> {
+    const scored = (await this.ctx.rsiEvolutionLedger.entries())
+      .filter((row): row is RsiReplayProposal & { score: number; baselineScore: number } =>
+        row.score !== undefined && row.baselineScore !== undefined)
+    if (scored.length === 0) return 0
+    return scored.reduce((sum, row) => sum + (row.score - row.baselineScore), 0) / scored.length
+  }
+
   /** The active policy's recorded score, when the ledger has one for its content. */
   private async baselineScore(artifacts: RsiArtifacts): Promise<{ baselineScore?: number }> {
     const fingerprint = artifactsFingerprint(artifacts)
@@ -166,11 +210,19 @@ export class ReplayRsiDistiller extends RsiDistiller {
    * Dream over the recorded outcomes: derive at most `maxLessons` bounded
    * lessons from the joined proposal/score rows, deterministic in content
    * and order. An under-sampled world injects nothing, so the first cycles
-   * behave exactly like the shipped provider.
+   * behave exactly like the shipped provider. Under conservative admission
+   * (an unreliable prediction window) the directional best/worst lessons are
+   * suppressed and a world-model warning is minted instead — the replay
+   * model's own predictions are not admissible evidence until a reliable
+   * window re-establishes them.
    * @param input - the distill input about to be dispatched.
+   * @param admission - the world-model admission decision for this round.
    * @returns the replay lessons to append to the input's knowledge base.
    */
-  private async dreamLessons(input: RsiDistillInput): Promise<readonly RsiKnowledgeEntry[]> {
+  private async dreamLessons(
+    input: RsiDistillInput,
+    admission: { conservative: boolean; mae: number },
+  ): Promise<readonly RsiKnowledgeEntry[]> {
     const rows = await this.ctx.rsiEvolutionLedger.entries()
     const scored = rows.filter((row): row is RsiReplayProposal & { score: number; scoredAt: number } =>
       row.score !== undefined && row.scoredAt !== undefined)
@@ -189,6 +241,10 @@ export class ReplayRsiDistiller extends RsiDistiller {
     if (repeats.length > 0) {
       const times = repeats.reduce((sum, row) => sum + row.distilledCount, 0)
       mint('rejection', `replay: proposing the active policy's exact content was recorded ${String(times)}× and settled without improvement; distill structurally different guidance or skills.`)
+    }
+    if (admission.conservative) {
+      mint('rejection', `world model: replay predictions are unreliable over the current window (mean error ${formatScore(admission.mae)}); treat replay-derived guidance as weak evidence and require fresh benchmark outcomes before trusting a direction.`)
+      return lessons.slice(0, this.maxLessons)
     }
     mint('insight', best.baselineScore === undefined
       ? `replay: the strongest recorded proposal scored ${formatScore(best.score)} (active score unknown then); its opening guidance was: "${best.firstGuidance}"`

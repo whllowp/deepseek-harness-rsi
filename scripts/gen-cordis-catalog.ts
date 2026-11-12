@@ -51,6 +51,8 @@ export { REGION_BEGIN, REGION_END }
  */
 export const SERVICE_PAGE: Record<string, string> = {
   rsiEvolutionLedger: 'dual-core-rsi.md',
+  rsiEvolutionTrajectory: 'dual-core-rsi.md',
+  rsiWorldModel: 'dual-core-rsi.md',
   translator: 'translation.md',
   cotTranslation: 'translation.md',
   speechToText: 'voice-input.md',
@@ -904,6 +906,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   RsiKnowledgeEntry: 'long-term knowledge entries are owned by packages/experimental/dual-core-rsi/README.md',
   RsiArtifacts: 'improvable-surface artifact sets are owned by packages/experimental/dual-core-rsi/README.md',
   RsiReplayProposal: 'replay-ledger proposal rows are owned by packages/experimental/dual-core-rsi-evolution/README.md',
+  RsiTrajectoryRound: 'trajectory round rows are owned by packages/experimental/dual-core-rsi-evolution/README.md',
+  ReliabilityAssessment: 'world-model reliability assessments are owned by packages/experimental/dual-core-rsi-evolution/README.md',
   RsiDecisionSource: 'merge decision sources are owned by packages/experimental/dual-core-rsi/README.md',
   RsiMergeResult: 'merge results are owned by packages/experimental/dual-core-rsi/README.md',
   RsiDeclineResult: 'decline results are owned by packages/experimental/dual-core-rsi/README.md',

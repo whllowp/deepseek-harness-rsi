@@ -8,6 +8,12 @@
       name: '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/evolution-ledger'
       config:
         maxProposals: 200
+    - id: dual-core-rsi-evolution-world-model
+      name: '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/world-model'
+      config:
+        window: 5
+        minPairs: 3
+        errorThreshold: 0.2
     - id: dual-core-rsi-benchmark
       name: '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/harmony-benchmark'
       config:

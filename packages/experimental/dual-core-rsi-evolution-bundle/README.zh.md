@@ -9,7 +9,7 @@ kind: "package-bundle"
 
 ## 概述
 
-以演进后的组合添加双核 RSI 模式：与双核 RSI bundle 相同的默认开启守护核、侧边栏面板与像素英雄伴件，但蒸馏器与基准两行被[演进插件](../dual-core-rsi-evolution/README.zh.md)替换——回放蒸馏器在每次蒸馏前于已记录的提案/得分结果上做梦，多目标基准的 Tchebycheff 门控把压力压在达成最差的目标族上。作为双核 RSI bundle 的替代：二者只挂其一。
+以演进后的组合添加双核 RSI 模式：与双核 RSI bundle 相同的默认开启守护核、侧边栏面板与像素英雄伴件，但蒸馏器与基准两行被[演进插件](../dual-core-rsi-evolution/README.zh.md)替换——回放蒸馏器在每次蒸馏前于已记录的提案/得分结果上做梦，多目标基准的 Tchebycheff 门控把压力压在达成最差的目标族上，外加把做梦置于预测可靠性之后的世界模型与组合循环之上的轨迹运行器。作为双核 RSI bundle 的替代：二者只挂其一。
 
 ## 目录
 
@@ -26,12 +26,12 @@ kind: "package-bundle"
 
 在 Web 或 Desktop 中打开插件，启用 **Dual-core RSI Evolution** 以替代 **Dual-core RSI**（二者只挂其一）。关闭即移除其 profile 层。
 
-启用该 bundle 会挂载回放账本、随附 fixture 用例评估器之上的 Harmony 基准、随附子代理蒸馏器之上的回放蒸馏器、带工具与 `/rsi` 命令的双核 RSI 服务、自进化侧边栏面板以及像素英雄伴件。定时守护核依据新鲜会话活动自行循环并采纳过门候选。随附的目标划分奖励在 1200 字符预算内携带 `npm test`、`git status` 与 `CHANGELOG` 指引的策略，权重为 0.75 验证对 0.25 简洁，门控展示的是均衡的多目标采纳而非端到任务质量。
+启用该 bundle 会挂载回放账本、其上的世界模型、随附 fixture 用例评估器之上的 Harmony 基准、随附子代理蒸馏器之上的回放蒸馏器、轨迹运行器、带工具与 `/rsi` 命令的双核 RSI 服务、自进化侧边栏面板以及像素英雄伴件。定时守护核依据新鲜会话活动自行循环并采纳过门候选。随附的目标划分奖励在 1200 字符预算内携带 `npm test`、`git status` 与 `CHANGELOG` 指引的策略，权重为 0.75 验证对 0.25 简洁，门控展示的是均衡的多目标采纳而非端到任务质量。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
 
-补丁在基础组合之上插入五行：`dual-core-rsi-evolution-ledger`、`dual-core-rsi-benchmark`（Harmony 提供者）、`dual-core-rsi-distiller`（回放提供者）、`dual-core-rsi`（服务）与两个客户端行。提供者选择是组合而非配置分支；换 bundle 即换策略。`cordis.patch.yml` 中的用例集与目标权重是部署选择，可像任何行配置一样编辑。
+补丁在基础组合之上插入八行：`dual-core-rsi-evolution-ledger`、`dual-core-rsi-evolution-world-model`、`dual-core-rsi-benchmark`（Harmony 提供者）、`dual-core-rsi-distiller`（回放提供者）、`dual-core-rsi-evolution-trajectory`、`dual-core-rsi`（服务）与两个客户端行。提供者选择是组合而非配置分支；换 bundle 即换策略。`cordis.patch.yml` 中的用例集与目标权重是部署选择，可像任何行配置一样编辑。
 
 <a id="further-exploration"></a>
 ## 进一步探索

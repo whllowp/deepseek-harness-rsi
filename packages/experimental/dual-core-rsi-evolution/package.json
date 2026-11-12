@@ -34,6 +34,10 @@
       "types": "./lib/types/plugin-trajectory.d.ts",
       "default": "./lib/types/plugin-trajectory.js"
     },
+    "./world-model": {
+      "types": "./lib/types/plugin-world-model.d.ts",
+      "default": "./lib/types/plugin-world-model.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -45,7 +49,7 @@
   "license": "MIT",
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
-    "@deepseek-ai/dsh-storage-domain": "workspace:~"
+    "@deepseek-ai/dsh-storage-domain": "workspace:*"
   },
   "dependencies": {
     "@deepseek-ai/dsh-experimental-dual-core-rsi": "workspace:*",
@@ -61,7 +65,7 @@
     "@deepseek-ai/dsh-scope": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-storage": "workspace:*",
-    "@deepseek-ai/dsh-storage-domain": "workspace:~",
+    "@deepseek-ai/dsh-storage-domain": "workspace:*",
     "@deepseek-ai/dsh-storage-json": "workspace:*",
     "@deepseek-ai/dsh-subagent": "workspace:*"
   }

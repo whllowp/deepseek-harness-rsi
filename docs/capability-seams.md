@@ -9,6 +9,8 @@ A service can be a core spine service, a swappable capability seam, a bundle/com
 flowchart LR
   pkg_experimental_dual_core_rsi_evolution["experimental-dual-core-rsi-evolution"]
   svc_rsiEvolutionLedger["ctx.rsiEvolutionLedger<br/>Dual-core RSI replay ledger"]
+  svc_rsiEvolutionTrajectory["ctx.rsiEvolutionTrajectory<br/>Dual-core RSI evolution trajectory"]
+  svc_rsiWorldModel["ctx.rsiWorldModel<br/>Dual-core RSI world model"]
   pkg_experimental_client_ui_cot_translation["experimental-client-ui-cot-translation"]
   svc_cotTranslation["ctx.cotTranslation<br/>Reasoning translation Remote"]
   pkg_experimental_translator["experimental-translator"]
@@ -356,6 +358,8 @@ flowchart LR
   pkg_experimental_dual_core_rsi --> svc_rsiBenchmark
   pkg_experimental_dual_core_rsi --> svc_rsiDistiller
   pkg_experimental_dual_core_rsi_evolution --> svc_rsiEvolutionLedger
+  pkg_experimental_dual_core_rsi_evolution --> svc_rsiEvolutionTrajectory
+  pkg_experimental_dual_core_rsi_evolution --> svc_rsiWorldModel
   pkg_experimental_ptc_runtime_python --> svc_ptcRuntime
   pkg_experimental_speech_to_text --> svc_speechToText
   pkg_experimental_speech_to_text_sensevoice --> svc_speechToText
@@ -626,6 +630,8 @@ flowchart LR
 | ctx key | Role | Owner | Implementations | Direct consumers | Companion plugins | Note |
 | --- | --- | --- | --- | --- | --- | --- |
 | `ctx.rsiEvolutionLedger` | `service` | [`experimental-dual-core-rsi-evolution`](../packages/experimental/dual-core-rsi-evolution) | - | - | - | Records distilled proposals and joins their benchmark scores by content fingerprint so the replay distiller can dream over realized outcomes. |
+| `ctx.rsiEvolutionTrajectory` | `service` | [`experimental-dual-core-rsi-evolution`](../packages/experimental/dual-core-rsi-evolution) | - | - | - | Drives bounded evolution rounds, snapshots the Harmony objective attainments, and settles each round into the JSONL trajectory log and the topology graph. |
+| `ctx.rsiWorldModel` | `service` | [`experimental-dual-core-rsi-evolution`](../packages/experimental/dual-core-rsi-evolution) | - | - | - | Classifies replay prediction reliability over a sliding window of prediction-observation pairs and gates the dream admission behind a conditional adaptation. |
 | `ctx.cotTranslation` | `service` | [`experimental-client-ui-cot-translation`](../packages/experimental/client-ui-cot-translation) | - | - | - | Serves reasoning translations, reuses saved results, and joins ordinary Session activation for uncached inactive Sessions. |
 | `ctx.translator` | `service` | [`experimental-translator`](../packages/experimental/translator) | - | [`experimental-client-ui-cot-translation`](../packages/experimental/client-ui-cot-translation) | - | Resolves Google or Bing requests and retains shared experimental records through the active Session writer. |
 | `ctx.hmr` | `core` | [`hmr`](../packages/boot/hmr) | - | [`app-boot`](../packages/boot/app-boot) | - | Owns module and exact configuration watchers; application mutations share its queue and automatic reloads await the application file lock. |

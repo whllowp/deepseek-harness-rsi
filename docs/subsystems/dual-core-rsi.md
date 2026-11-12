@@ -346,9 +346,135 @@ abstract recordScore(artifacts: RsiArtifacts, score: number): Promise<void>
  * @returns the bounded ledger rows.
  */
 abstract entries(): Promise<readonly RsiReplayProposal[]>
+
+/**
+ * Settle one evolution trajectory round.
+ * @param round - the settled round record.
+ * @returns resolution when the row is durable.
+ */
+abstract recordRound(round: RsiTrajectoryRound): Promise<void>
+
+/**
+ * Every recorded trajectory round, oldest first.
+ * @returns the bounded round rows.
+ */
+abstract trajectoryRounds(): Promise<readonly RsiTrajectoryRound[]>
+
+/**
+ * Record one world-model prediction for a proposal under a policy version.
+ * Re-predicting the same content under the same version upserts the row.
+ * @param version - the policy version the prediction is attributable to.
+ * @param fingerprint - the proposed artifact set's fingerprint.
+ * @param predictedDelta - the replay model's expected benchmark delta.
+ * @returns resolution when the row is durable.
+ */
+abstract recordPrediction(version: string, fingerprint: string, predictedDelta: number): Promise<void>
+
+/**
+ * Every prediction recorded under one policy version, as a fingerprint to
+ * predicted-delta map.
+ * @param version - the policy version to read.
+ * @returns the fingerprint to predicted-delta map.
+ */
+abstract predictionsFor(version: string): Promise<ReadonlyMap<string, number>>
+
+/**
+ * Record or refresh the conditional world-model adaptation for a policy
+ * version (upsert keyed by version; clears any recovery).
+ * @param version - the policy version whose predictions are unreliable.
+ * @param mae - the mean absolute error behind the trigger.
+ * @param pairs - the joined pairs behind the trigger.
+ * @returns resolution when the row is durable.
+ */
+abstract recordAdaptationFor(version: string, mae: number, pairs: number): Promise<void>
+
+/**
+ * Mark a version's conditional adaptation as recovered (a reliable window
+ * ended it).
+ * @param version - the policy version to clear.
+ * @returns resolution when the row is durable; versions without an adaptation resolve too.
+ */
+abstract markAdaptationRecoveredFor(version: string): Promise<void>
+
+/**
+ * Whether a conditional adaptation is active for one policy version.
+ * @param version - the policy version to check.
+ * @returns true while an adaptation exists without a recovery.
+ */
+abstract isAdaptedFor(version: string): Promise<boolean>
 ```
 
 Source: [`packages/experimental/dual-core-rsi-evolution/src/ledger.ts`](../../packages/experimental/dual-core-rsi-evolution/src/ledger.ts)
+
+<a id="ctxrsievolutiontrajectory--evolutiontrajectory-abstract-seam"></a>
+
+### `ctx.rsiEvolutionTrajectory` — `EvolutionTrajectory` (abstract seam)
+
+Service Definition of the evolution trajectory. Every round runs one daemon cycle through the controller, snapshots the objective shape and the Tchebycheff pressure direction, and settles one durable trajectory row plus one JSONL line, so a ten-round evolution leaves a replayable log and a renderable topology.
+
+```ts cordis-catalog
+/**
+ * Run `count` evolution rounds, recording each as one trajectory row.
+ * A failed round is recorded and the remaining rounds continue.
+ * @param count - rounds to run; omission uses the configured default.
+ * @param signal - cancellation signal owned by the caller.
+ * @returns the rounds recorded by this invocation.
+ */
+abstract runRounds(count?: number, signal?: AbortSignal): Promise<readonly RsiTrajectoryRound[]>
+
+/**
+ * Render the evolution topology: one node per generation the rounds
+ * touched, one edge per round's active→candidate proposal, labeled with
+ * the round, outcome, and score delta.
+ * @returns a mermaid `flowchart TD` block.
+ */
+abstract renderTopology(): Promise<string>
+
+/**
+ * Render the trajectory log: one line per round with scores, objective
+ * attainments, and the pressure direction.
+ * @returns the plain-text trajectory log.
+ */
+abstract renderLog(): Promise<string>
+
+/**
+ * Every recorded trajectory round, oldest first.
+ * @returns the round rows in round order.
+ */
+abstract rounds(): Promise<readonly RsiTrajectoryRound[]>
+```
+
+Source: [`packages/experimental/dual-core-rsi-evolution/src/trajectory.ts`](../../packages/experimental/dual-core-rsi-evolution/src/trajectory.ts)
+
+<a id="ctxrsiworldmodel--worldmodel-abstract-seam"></a>
+
+### `ctx.rsiWorldModel` — `WorldModel` (abstract seam)
+
+Service Definition of the prediction-reliability world model. Reliability follows the version rule: only predictions recorded under the assessed policy version join the window, so proposals distilled under earlier policies never contaminate the current error estimate.
+
+```ts cordis-catalog
+/**
+ * Assess prediction reliability for one policy version from the replay
+ * ledger's joined prediction–observation pairs. An insufficient window
+ * (fewer joined pairs than `minPairs`) is reported as insufficient rather
+ * than treated as evidence of reliability. An unreliable sufficient window
+ * triggers a conditional adaptation; a later reliable window ends it.
+ * @param version - the policy version (active generation id) to assess.
+ * @returns the classification with its supporting pairs and mean absolute error.
+ */
+abstract assess(version: string): Promise<ReliabilityAssessment>
+
+/**
+ * Whether the conservative dream admission is active for one policy
+ * version (a conditional adaptation fired and no reliable window has
+ * ended it).
+ * @param version - the policy version to check.
+ * @returns true while the adaptation is active.
+ */
+abstract isAdapted(version: string): Promise<boolean>
+```
+
+Source: [`packages/experimental/dual-core-rsi-evolution/src/world-model.ts`](../../packages/experimental/dual-core-rsi-evolution/src/world-model.ts)
 
 <a id="dual-core-rsi-events"></a>
 

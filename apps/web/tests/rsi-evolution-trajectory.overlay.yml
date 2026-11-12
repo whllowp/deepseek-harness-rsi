@@ -4,6 +4,12 @@
 - insert:
     - id: dual-core-rsi-evolution-ledger
       name: '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/evolution-ledger'
+    - id: dual-core-rsi-evolution-world-model
+      name: '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/world-model'
+      config:
+        window: 5
+        minPairs: 3
+        errorThreshold: 0.2
     - id: dual-core-rsi-benchmark
       name: '@deepseek-ai/dsh-experimental-dual-core-rsi-evolution/harmony-benchmark'
       config:

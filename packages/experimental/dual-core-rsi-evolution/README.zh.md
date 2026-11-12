@@ -1,5 +1,5 @@
 ---
-description: "双核 RSI 演进插件：Dream-RSI 式回放蒸馏器在记录的提案/得分结果上做梦，Harmony-Harness 式多目标基准以 Tchebycheff 门控把压力压在最差目标上，外加共享回放账本——全部经由既有双核 RSI 接缝挂载，不改双核 RSI 源码。"
+description: "双核 RSI 演进插件：Dream-RSI 式回放蒸馏器在记录的提案/得分结果上做梦，Harmony-Harness 式多目标基准以 Tchebycheff 门控把压力压在最差目标上，外加共享回放账本、按预测可靠性门控做梦的世界模型（arXiv 2610.13912），以及把每轮落为 JSONL 日志与拓扑图的轨迹运行器——全部经由既有双核 RSI 接缝挂载，不改双核 RSI 源码。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dual-core-rsi-evolution` 经由[双核 RSI 模式](../dual-core-rsi/README.zh.md)的提供者接缝（而非其源码）演进该模式：Dream-RSI 式（arXiv 2609.14858）回放蒸馏器把每条已记录提案与其后续基准得分当作回放世界，在每次蒸馏前于该历史上做梦，并把实际结果作为教训注入；Harmony 式（arXiv 2610.15150）Harmony 基准把用例族按目标计分并以加权 Tchebycheff 标量化，门控的压力始终压在达成最差的目标上。二者挂载在既有提供者的确切位置；[演进 bundle](../dual-core-rsi-evolution-bundle/README.zh.md) 负责组合。
+`dual-core-rsi-evolution` 经由[双核 RSI 模式](../dual-core-rsi/README.zh.md)的提供者接缝（而非其源码）演进该模式：Dream-RSI 式（arXiv 2609.14858）回放蒸馏器把每条已记录提案与其后续基准得分当作回放世界，在每次蒸馏前于该历史上做梦，并把实际结果作为教训注入；Harmony 式（arXiv 2610.15150）Harmony 基准把用例族按目标计分并以加权 Tchebycheff 标量化，门控的压力始终压在达成最差的目标上。RSI-Anything 式（arXiv 2610.13912）世界模型审判回放模型自身——每次蒸馏记录一条预测，每个连接的得分即其观测，预测-观测对的滑动窗口分类可靠性并把做梦置于条件适配之后；轨迹运行器驱动组合循环的有界轮次，把每轮落为持久行、JSONL 日志与拓扑图。全部挂载在既有提供者的确切位置；[演进 bundle](../dual-core-rsi-evolution-bundle/README.zh.md) 负责组合。
 
 ## 目录
 
@@ -24,7 +24,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-在插件中启用 [双核 RSI 演进 bundle](../dual-core-rsi-evolution-bundle/README.zh.md) 以替代双核 RSI bundle（二者只挂其一），或直接组合本包：先挂 `./evolution-ledger`，再以 `./harmony-benchmark` 替代 fixture 基准行、以 `./replay-distiller` 替代 distiller-subagent 行，最后挂双核 RSI 服务。账本依赖 `storageDomain` 服务；两个提供者依赖账本。其余——会话、投影、存储、作业——与双核 RSI 模式已需要的组合完全一致。
+在插件中启用 [双核 RSI 演进 bundle](../dual-core-rsi-evolution-bundle/README.zh.md) 以替代双核 RSI bundle（二者只挂其一），或直接组合本包：先挂 `./evolution-ledger`，再以 `./harmony-benchmark` 替代 fixture 基准行、以 `./replay-distiller` 替代 distiller-subagent 行，再在账本旁挂 `./world-model`，最后挂双核 RSI 服务；`./trajectory` 可选，驱动自己的轮次而非守护进程。账本与世界模型依赖 `storageDomain` 服务；各提供者依赖账本。其余——会话、投影、存储、作业——与双核 RSI 模式已需要的组合完全一致。
 
 ### 回放账本
 
@@ -33,6 +33,14 @@ kind: "package-reference"
 ### 蒸馏前做梦
 
 每次蒸馏前，回放蒸馏器重放世界：得分已连接的行成为结果，并从中派生至多 `maxLessons` 条教训，追加在控制器自有知识行之后——当活跃策略的完全相同内容被反复重提时注入一条拒绝教训；一条洞察点名最强已记录提案及其相对活跃策略的得分；一条拒绝点名最弱已记录方向；一条前沿综述统计有多少提案高于同代活跃策略。样本不足的世界不注入任何内容，因此最初几个周期与随附提供者的行为完全一致。子代理回答之后，提案进入账本，等待随后的得分。
+
+### 轨迹记录
+
+`./trajectory` 挂载 `ctx.rsiEvolutionTrajectory`：每轮 `runRounds` 经组合控制器启动一个守护循环，快照活跃策略的目标达成度与最大加权缺口（Tchebycheff 压力方向），并结算一行持久记录加一行 JSONL。失败的一轮照常记录，其余轮次继续，因此十轮留下可回放的日志和一幅晋升与保留的拓扑图。
+
+### 世界模型门控
+
+`./world-model` 挂载 `ctx.rsiWorldModel`：归属当前策略版本的预测-观测对滑动窗口被分类为 `reliable`、`unreliable` 或 `insufficient`——少于 `minPairs` 的窗口是不足的，且绝不当作可靠性的证据；充足窗口的平均绝对误差超过 `errorThreshold` 即不可靠。不可靠窗口触发条件适配：做梦转入保守准入，压制其方向性教训、改为注入一条世界模型警告，直到稍后的可靠窗口结束该适配。
 
 ### Tchebycheff 门控
 
@@ -48,6 +56,10 @@ Harmony 基准把用例计分委托给随附 fixture 评估器，然后对报告
 | `minSamples` | `2` | 注入任何教训前所需的最小已连接结果行数。 |
 | `cases` | — | 转发给随附 fixture 评估器的用例定义（与 fixture 基准同形）。 |
 | `objectives` | `[]` | 用例集上的目标族：唯一名称、正权重、划分用例子集的用例列表。为空表示单一 `general` 目标。 |
+| `rounds` | `10` | 轨迹运行器的默认轮数。 |
+| `window` | `5` | 世界模型评估窗口内的预测-观测对数。 |
+| `minPairs` | `3` | 非不足可靠性判定所需的最小连接对数。 |
+| `errorThreshold` | `0.2` | 充足窗口被判不可靠的平均绝对误差阈值。 |
 
 ### Model Experience 审计说明
 
@@ -61,6 +73,8 @@ Harmony 基准把用例计分委托给随附 fixture 评估器，然后对报告
 | [`src/ledger.ts`](src/ledger.ts) | `ctx.rsiEvolutionLedger` 接缝与按内容的提案/得分持久连接 |
 | [`src/replay-distiller.ts`](src/replay-distiller.ts) | `ctx.rsiDistiller` 提供者：做梦、委托、记录 |
 | [`src/harmony-benchmark.ts`](src/harmony-benchmark.ts) | `ctx.rsiBenchmark` 提供者：族达成度与 Tchebycheff 得分 |
+| [`src/world-model.ts`](src/world-model.ts) | `ctx.rsiWorldModel` 接缝：预测可靠性与条件适配 |
+| [`src/trajectory.ts`](src/trajectory.ts) | `ctx.rsiEvolutionTrajectory` 接缝：有界轮次、JSONL 日志与拓扑图 |
 | [`src/domain.ts`](src/domain.ts) | `rsi_evolution` 存储域 |
 
 装饰器无法在同一服务名下与随附提供者并列挂载，因此各自在分离的 context 上启动内部提供者：fixture 评估器不触碰任何树服务，子代理蒸馏器则把树的 `subagents` 接缝转发到其分离 context 上。两个内部生命周期都随装饰器释放。提供者的账本写入是受控的：故障只记日志，裁决或提案照常落地。
@@ -72,6 +86,7 @@ Harmony 基准把用例计分委托给随附 fixture 评估器，然后对报告
 - [`dual-core-rsi-evolution-bundle`](../dual-core-rsi-evolution-bundle/README.zh.md) — 组合好的 profile 层。
 - Dream-RSI：[arXiv 2609.14858](https://arxiv.org/abs/2609.14858) — 发现历史作为回放模拟器。
 - Harmony Harness：[arXiv 2610.15150](https://arxiv.org/abs/2610.15150) — 多目标、可组合的 harness 演进。
+- RSI-Anything：[arXiv 2610.13912](https://arxiv.org/abs/2610.13912) — 以预测可靠性门控递归自我改进的世界模型。
 
 <a id="model-experience"></a>
 ## 模型体验
@@ -87,6 +102,7 @@ Harmony 基准把用例计分委托给随附 fixture 评估器，然后对报告
 ```markdown
 - [rejection] replay: proposing the active policy's exact content was recorded 1× and settled without improvement; distill structurally different guidance or skills.
 - [insight] replay: the strongest recorded proposal scored 0.900 against active 0.200; its opening guidance was: "run npm test before declaring done"
+- [rejection] world model: replay predictions are unreliable over the current window (mean error 0.400); treat replay-derived guidance as weak evidence and require fresh benchmark outcomes before trusting a direction.
 ```
 
 #### Token 效应

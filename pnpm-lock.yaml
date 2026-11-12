@@ -8923,7 +8923,7 @@ importers:
         specifier: workspace:*
         version: link:../../storage/storage
       '@deepseek-ai/dsh-storage-domain':
-        specifier: workspace:~
+        specifier: workspace:*
         version: link:../../storage/storage-domain
       '@deepseek-ai/dsh-storage-json':
         specifier: workspace:*

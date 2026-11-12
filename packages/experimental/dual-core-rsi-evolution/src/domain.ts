@@ -80,10 +80,38 @@ const trajectorySchema = z.object({
   ledgerRows: z.number().int().nonnegative(),
   /** Long-term knowledge entries at round end. */
   knowledgeRows: z.number().int().nonnegative(),
+  /** World-model reliability assessment at round end; absent before the first assessment. */
+  reliability: z.enum(['reliable', 'unreliable', 'insufficient']).optional(),
+  /** Joined prediction–observation pairs behind the assessment. */
+  reliabilityPairs: z.number().int().nonnegative().optional(),
   /** One-line round note (rationale, skip reason, or error). */
   note: z.string().min(1),
   /** Safe-integer epoch milliseconds at round settlement. */
   settledAt: instantSchema,
+}).strict()
+
+const predictionSchema = z.object({
+  /** Structural fingerprint of the proposed artifact set; joins the proposal row. */
+  fingerprint: z.string().min(1),
+  /** Policy version (active generation id) the prediction is attributable to. */
+  version: z.string().min(1),
+  /** Predicted benchmark delta (score change) for the proposal. */
+  predictedDelta: z.number(),
+  /** Safe-integer epoch milliseconds at prediction. */
+  predictedAt: instantSchema,
+}).strict()
+
+const adaptationSchema = z.object({
+  /** Policy version whose unreliable predictions triggered the adaptation; the table key. */
+  version: z.string().min(1),
+  /** Mean absolute error of the joined pairs behind the trigger. */
+  mae: z.number().min(0),
+  /** Joined pairs behind the trigger. */
+  pairs: z.number().int().positive(),
+  /** Safe-integer epoch milliseconds at adaptation. */
+  adaptedAt: instantSchema,
+  /** Safe-integer epoch milliseconds when a reliable window ended the adaptation; absent while active. */
+  recoveredAt: instantSchema.optional(),
 }).strict()
 
 /**
@@ -97,6 +125,8 @@ export const rsiEvolutionDomain = defineDomain({
   tables: {
     proposals: domainTable<string, RsiReplayProposal>(proposalSchema),
     trajectory: domainTable<string, RsiTrajectoryRound>(trajectorySchema),
+    predictions: domainTable<string, RsiWorldModelPrediction>(predictionSchema),
+    adaptations: domainTable<string, RsiWorldModelAdaptation>(adaptationSchema),
   },
 })
 
@@ -105,3 +135,9 @@ export type RsiReplayProposal = z.infer<typeof proposalSchema>
 
 /** One recorded evolution round: the cycle outcome with its objective shape. */
 export type RsiTrajectoryRound = z.infer<typeof trajectorySchema>
+
+/** One world-model prediction: the replay model's expected delta for a proposal. */
+export type RsiWorldModelPrediction = z.infer<typeof predictionSchema>
+
+/** One conditional world-model adaptation event. */
+export type RsiWorldModelAdaptation = z.infer<typeof adaptationSchema>
